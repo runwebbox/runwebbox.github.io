@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Page Not Found - 404</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu,
+          sans-serif;
+        background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        padding: 20px;
+        color: #333;
+      }
+
+      .container {
+        max-width: 600px;
+        background: white;
+        border-radius: 20px;
+        padding: 40px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.1);
+        animation: fadeIn 0.5s ease-out;
+      }
+
+      .oops {
+        font-size: 5rem;
+        font-weight: 900;
+        color: #ff4757;
+        margin-bottom: 20px;
+        line-height: 1;
+        text-shadow: 3px 3px 0 rgba(255, 71, 87, 0.1);
+      }
+
+      .message {
+        font-size: 1.5rem;
+        margin-bottom: 20px;
+        color: #555;
+        line-height: 1.5;
+      }
+
+      .redirect-message {
+        font-size: 1rem;
+        color: #666;
+        margin-bottom: 30px;
+        background: #f8f9fa;
+        padding: 15px;
+        border-radius: 10px;
+        border-left: 4px solid #4dabf7;
+      }
+
+      .countdown {
+        font-weight: bold;
+        color: #ff4757;
+      }
+
+      .button {
+        display: inline-block;
+        background: #4dabf7;
+        color: white;
+        padding: 12px 30px;
+        text-decoration: none;
+        border-radius: 50px;
+        font-weight: 600;
+        font-size: 1.1rem;
+        transition: all 0.3s ease;
+        border: none;
+        cursor: pointer;
+        box-shadow: 0 5px 15px rgba(77, 171, 247, 0.3);
+      }
+
+      .button:hover {
+        background: #339af0;
+        transform: translateY(-2px);
+        box-shadow: 0 8px 20px rgba(77, 171, 247, 0.4);
+      }
+
+      .footer {
+        margin-top: 40px;
+        color: #888;
+        font-size: 0.9rem;
+      }
+
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(20px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      @media (max-width: 480px) {
+        .container {
+          padding: 30px 20px;
+        }
+
+        .oops {
+          font-size: 3.5rem;
+        }
+
+        .message {
+          font-size: 1.2rem;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="oops">Oops...</div>
+
+      <div class="message">
+        It seems the service worker has stopped working... Let's try to restore
+        everything...
+      </div>
+
+      <div class="redirect-message">
+        Redirecting to homepage in
+        <span id="countdown" class="countdown">5</span> second...
+      </div>
+    </div>
+
+    <div class="footer">404 - Page Not Found</div>
+
+    <script>
+      // Countdown and redirect
+      let seconds = 5;
+      const countdownElement = document.getElementById('countdown');
+      const countdownInterval = setInterval(() => {
+        seconds--;
+        countdownElement.textContent = seconds;
+
+        if (seconds <= 0) {
+          clearInterval(countdownInterval);
+          window.history.go(1 - window.history.length);
+        }
+      }, 1000);
+
+      // Optional: Skip countdown if user clicks anywhere
+      document.body.addEventListener('click', function () {
+        clearInterval(countdownInterval);
+        window.history.go(1 - window.history.length);
+      });
+    </script>
+  </body>
+</html>
