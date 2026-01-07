@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import useV86 from './useV86';
+import useV86 from './useEngine';
 
 export const useVMTerminal = (vmId: string | null) => {
   const [output, setOutput] = useState<string[]>([]);

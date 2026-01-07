@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import useV86 from '../hooks/useV86';
+import useV86 from '../hooks/useEngine';
 import { useVMTerminal } from '../hooks/useVMTerminal';
 
 const Terminal: React.FC = () => {

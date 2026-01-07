@@ -1,9 +1,9 @@
-import type { FileItem } from '../types/fileSystem.ts';
+import type { FSEntry } from '../../engine/fileSystem.ts';
 import {
   BaseLoader,
   type ProgressCallback,
   type GithubParams,
-} from './types.ts';
+} from '../types.ts';
 
 export default class GithubLoader extends BaseLoader {
   readonly name = 'GitHub Loader';
@@ -16,7 +16,7 @@ export default class GithubLoader extends BaseLoader {
     this.onProgress = onProgress;
   }
 
-  protected async performLoad(): Promise<FileItem> {
+  protected async performLoad(): Promise<FSEntry> {
     /*
     const json = await this.fetch_json(this.params.url, 0, 2);
     for (let i=0;i<1000;i++){
@@ -25,6 +25,6 @@ export default class GithubLoader extends BaseLoader {
     }
     this.onProgress({message:'test', percent: 50});
     await new Promise(r => setTimeout(r, 2000));*/
-    return { id: '123', name: 'ex.json', type: 'file', content: '' };
+    return { name: 'ex.json', content: new TextEncoder().encode('') };
   }
 }

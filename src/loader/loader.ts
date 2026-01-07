@@ -1,29 +1,20 @@
-import { createSlice, type PayloadAction } from '@reduxjs/toolkit';
-import type { FileItem } from '../../types/fileSystem';
+import type { ProgressCallback } from './types';
+import GithubLoader from './loaders/github';
+import { exportWebBox } from './normalize';
+import ContentLoader from './loaders/content';
+import { Engine } from '../engine/engine';
+import type { FSEntry } from '../engine/fileSystem';
 
-interface FileSystemState {
-  openTabs: string[];
-  activeTab: string | null;
-  currentProject: string;
-}
-
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const initialFileSystem: FileItem = {
-  id: 'root',
+const initialFileSystem: FSEntry = {
   name: 'project',
-  type: 'folder',
-  children: [
+  content: [
     {
-      id: 'webbox.json',
       name: 'webbox.json',
-      type: 'file',
-      content: '{}',
+      content: new TextEncoder().encode('{}'),
     },
     {
-      id: 'index.html',
       name: 'index.html',
-      type: 'file',
-      content: `<!DOCTYPE html>
+      content: new TextEncoder().encode(`<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -63,13 +54,11 @@ const initialFileSystem: FileItem = {
 
     <script src="app.js"></script>
 </body>
-</html>`,
+</html>`),
     },
     {
-      id: 'app.js',
       name: 'app.js',
-      type: 'file',
-      content: `class Counter {
+      content: new TextEncoder().encode(`class Counter {
     constructor() {
         this.count = this.getCountFromUrl();
         this.history = [];
@@ -253,18 +242,14 @@ window.addEventListener('popstate', () => {
     // с новым URL, но обновим отображение
     const counter = new Counter();
     counter.displayLocation();
-});`,
+});`),
     },
     {
-      id: 'styles',
       name: 'styles',
-      type: 'folder',
-      children: [
+      content: [
         {
-          id: 'style.css',
           name: 'style.css',
-          type: 'file',
-          content: `* {
+          content: new TextEncoder().encode(`* {
     margin: 0;
     padding: 0;
     box-sizing: border-box;
@@ -412,55 +397,64 @@ h1 {
         width: 100%;
         max-width: 200px;
     }
-}`,
+}`),
         },
       ],
     },
   ],
 };
 
-const initialState: FileSystemState = {
-  //fileSystem: initialFileSystem,
-  openTabs: [],
-  activeTab: null,
-  currentProject: 'demo-project',
-};
+export async function loadWebBox(
+  url: URL,
+  onProgress: ProgressCallback
+): Promise<Engine> {
+  try {
+    const fs = await parseUrl(url, onProgress);
+    const conf = exportWebBox(fs);
+    //if (url.searchParams.has('diff')) {
+    //}t
+    const engine = new Engine(conf);
+    return engine;
+  } catch (error) {
+    let errorMessage = 'Failed to do something exceptional';
+    if (error instanceof Error) {
+      errorMessage = error.message;
+    }
+    onProgress({ message: `Error: ${errorMessage}`, percent: 100 });
+    const engine = new Engine(exportWebBox(initialFileSystem));
+    return engine;
+  }
+}
 
-const fileSystemSlice = createSlice({
-  name: 'fileSystem',
-  initialState,
-  reducers: {
-    openFile: (state, action: PayloadAction<string>) => {
-      const fileId = action.payload;
+async function parseUrl(
+  url: URL,
+  onProgress: ProgressCallback
+): Promise<FSEntry> {
+  let conf: FSEntry | null = null;
+  // GitHub loader
+  if (url.searchParams.has('github')) {
+    conf = await new GithubLoader(
+      {
+        type: 'github',
+        url: url.searchParams.get('github')!,
+      },
+      onProgress
+    ).load();
+  }
+  // Content loader
+  if (url.searchParams.has('content')) {
+    conf = await new ContentLoader(
+      {
+        type: 'content',
+        data: url.searchParams.get('content')!,
+      },
+      onProgress
+    ).load();
+  }
 
-      // Добавляем вкладку, если её еще нет
-      if (!state.openTabs.includes(fileId)) {
-        state.openTabs.push(fileId);
-      }
+  if (!conf) {
+    throw new Error('No data to load');
+  }
 
-      // Устанавливаем активную вкладку
-      state.activeTab = fileId;
-    },
-
-    closeTab: (state, action: PayloadAction<string>) => {
-      const fileId = action.payload;
-      state.openTabs = state.openTabs.filter(tabId => tabId !== fileId);
-
-      // Если закрыли активную вкладку, выбираем следующую
-      if (state.activeTab === fileId) {
-        state.activeTab =
-          state.openTabs.length > 0
-            ? state.openTabs[state.openTabs.length - 1]
-            : null;
-      }
-    },
-
-    setActiveTab: (state, action: PayloadAction<string>) => {
-      state.activeTab = action.payload;
-    },
-  },
-});
-
-export const { openFile, closeTab, setActiveTab } = fileSystemSlice.actions;
-
-export default fileSystemSlice.reducer;
+  return conf;
+}

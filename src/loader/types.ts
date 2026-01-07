@@ -1,4 +1,4 @@
-import type { FileItem } from '../types/fileSystem';
+import type { FSEntry } from '../engine/fileSystem';
 
 export interface LoadProgress {
   percent: number;
@@ -10,7 +10,7 @@ export type ProgressCallback = (progress: LoadProgress) => void;
 // Стратегии загрузки
 export interface FileLoader {
   readonly name: string;
-  load(onProgress?: ProgressCallback): Promise<FileItem>;
+  load(onProgress?: ProgressCallback): Promise<FSEntry>;
 }
 
 // Параметры для разных стратегий
@@ -24,18 +24,27 @@ export interface DirectParams {
   data: string;
 }
 
-export interface ZipUrlParams {
+export interface ContentParams {
+  type: 'content';
+  data: string;
+}
+
+export interface ZipParams {
   type: 'zip_url';
   url: string;
 }
 
-export type LoaderParams = GithubParams | DirectParams | ZipUrlParams;
+export type LoaderParams =
+  | GithubParams
+  | DirectParams
+  | ZipParams
+  | ContentParams;
 
 export abstract class BaseLoader implements FileLoader {
   abstract readonly name: string;
   abstract readonly onProgress: ProgressCallback;
 
-  async load(): Promise<FileItem> {
+  async load(): Promise<FSEntry> {
     this.onProgress({ message: 'Loading...', percent: 0 });
     return await this.performLoad(this.onProgress);
   }
@@ -112,5 +121,5 @@ export abstract class BaseLoader implements FileLoader {
 
   protected abstract performLoad(
     onProgress?: ProgressCallback
-  ): Promise<FileItem>;
+  ): Promise<FSEntry>;
 }

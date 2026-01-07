@@ -1,6 +1,7 @@
 import React, { lazy, Suspense, useState, useEffect, StrictMode } from 'react';
 import { loadWebBox } from './loader';
 import type { LoadProgress } from './types';
+import type { Engine } from '../engine/engine';
 
 const LazyComponent = lazy(() => import('../App'));
 
@@ -12,17 +13,17 @@ const WBLoader: React.FC = () => {
     message: 'Loading...',
     percent: 0,
   });
-  const [isLoaded, setIsLoaded] = useState(false);
+  const [engine, setEngine] = useState<Engine | null>(null);
 
   useEffect(() => {
     loadWebBox(new URL(window.location.href), (p: LoadProgress) => {
       setProgress(p);
-    }).then(() => {
-      setIsLoaded(true);
+    }).then((e: Engine) => {
+      setEngine(e);
     });
   }, []);
 
-  if (!isLoaded) {
+  if (!engine) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md">
@@ -90,7 +91,7 @@ const WBLoader: React.FC = () => {
           </div>
         }
       >
-        <LazyComponent />
+        <LazyComponent engine={engine} />
       </Suspense>
     </StrictMode>
   );

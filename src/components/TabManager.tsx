@@ -1,9 +1,10 @@
 import React from 'react';
 import { useFileSystem } from '../hooks/useFileSystem';
+import useEngine from '../hooks/useEngine';
 
 const TabManager: React.FC = () => {
-  const { openTabs, activeTab, setActiveTab, closeTab, getFile } =
-    useFileSystem();
+  const { openTabs, activeTab, setActiveTab, closeTab } = useFileSystem();
+  const Engine = useEngine();
 
   if (openTabs.length === 0) {
     return null;
@@ -12,7 +13,7 @@ const TabManager: React.FC = () => {
   return (
     <div className="bg-zinc-800 border-b border-zinc-700 flex">
       {openTabs.map(tabId => {
-        const file = getFile(tabId);
+        const file = Engine.getFileSystemAPI().stat(tabId);
         if (!file) return null;
 
         return (
@@ -25,7 +26,9 @@ const TabManager: React.FC = () => {
             }`}
             onClick={() => setActiveTab(tabId)}
           >
-            <span className="mr-2">{file.type === 'folder' ? '📁' : '📄'}</span>
+            <span className="mr-2">
+              {file.type === 'directory' ? '📁' : '📄'}
+            </span>
             <span className="max-w-xs truncate">{file.name}</span>
             <button
               className="ml-2 text-zinc-400 hover:text-white"

@@ -10,7 +10,7 @@ export default defineConfig({
   },
   base: './',
   server: {
-    open: '/editor/index.html',
+    open: '/editor/index.html?SW_URL_MAGIC=SWmag_UtXQRshi4lIWtM9d',
     headers: {
       'Service-Worker-Allowed': '/',
     },
@@ -20,7 +20,6 @@ export default defineConfig({
       input: {
         main: 'index.html',
         editor: 'editor/index.html',
-        loader: 'src/webBoxLoader/loader.ts',
       },
       output: {
         entryFileNames: chunkInfo => {

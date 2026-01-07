@@ -1,3 +1,4 @@
+import { isFSDirectory, isFSFile, type FSEntry } from '../engine/fileSystem';
 import type { FileItem } from '../types/fileSystem';
 import type { WebBoxConfig } from '../types/webBoxConfig';
 
@@ -8,7 +9,7 @@ import type { WebBoxConfig } from '../types/webBoxConfig';
     else
         create default
 */
-export function exportWebBox(fileSystem: FileItem): WebBoxConfig {
+export function exportWebBox(fileSystem: FSEntry): WebBoxConfig {
   // Check if there's a WebBoxConfig.json file in the file system
   const configFile = findConfigFile(fileSystem);
 
@@ -41,8 +42,8 @@ export function exportWebBox(fileSystem: FileItem): WebBoxConfig {
 }
 
 // Helper function to find WebBoxConfig.json in the file system
-function findConfigFile(fileSystem: FileItem): FileItem | null {
-  function searchFiles(items: FileItem[]): FileItem | null {
+function findConfigFile(fileSystem: FSEntry): FSEntry | null {
+  function searchFiles(items: FSEntry[]): FSEntry | null {
     for (const item of items) {
       if (item.type === 'file' && item.name === 'WebBoxConfig.json') {
         return item;
@@ -59,27 +60,32 @@ function findConfigFile(fileSystem: FileItem): FileItem | null {
 }
 
 // Helper function to remove WebBoxConfig.json from the file system
-function removeConfigFile(fileSystem: FileItem): FileItem {
-  function removeFromItems(items: FileItem[]): FileItem[] {
+function removeConfigFile(fileSystem: FSEntry): FSEntry {
+  function removeFromItems(items: FSEntry[]): FSEntry[] {
     return items.filter(item => {
-      if (item.type === 'file' && item.name === 'WebBoxConfig.json') {
+      if (isFSFile(item) && item.name === 'WebBoxConfig.json') {
         return false; // Remove the config file
       }
-      if (item.type === 'folder' && item.children) {
+      if (isFSDirectory(item)) {
         return {
           ...item,
-          children: removeFromItems(item.children),
+          children: removeFromItems(item.content),
         };
       }
       return true;
     });
   }
 
+  if (isFSFile(fileSystem)) {
+    return {
+      ...fileSystem,
+      content: fileSystem.content,
+    };
+  }
+
   return {
     ...fileSystem,
-    children: fileSystem.children
-      ? removeFromItems(fileSystem.children)
-      : undefined,
+    content: removeFromItems(fileSystem.content),
   };
 }
 

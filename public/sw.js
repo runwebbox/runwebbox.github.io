@@ -28,65 +28,89 @@ self.addEventListener('activate', event => {
 });
 
 const clientToOrigin = new Map(); // clientId -> source URL
-const urlToClient = new Map(); // URL -> clientId (для поиска по referrer)
+const SW_URL_MAGIC = 'SWmag_UtXQRshi4lIWtM9d';
 
+/**
+ * Определяет источник для iframe на основе запроса и контекста клиента
+ * @param {FetchEvent} event - Событие fetch
+ * @returns {Promise<{source: string, isEditor: boolean}>} - Объект с источником и флагом редактора
+ */
 async function determineIframeSource(event) {
-  const request = event.request;
+  const { request } = event;
   const requestUrl = request.url;
-  let referrer = request.referrer || '';
-  if (referrer.includes('/editor/index.html')) referrer = '';
 
-  // Получаем clientId из контекста запроса
-  const client = await self.clients.get(event.clientId);
-  if (!client) return requestUrl;
-  const clientId = client ? client.url : requestUrl;
-  if (clientId.includes('/editor/index.html'))
-    return { source: clientId, isEditor: true };
-  // загрузка html
-  if (request.mode === 'navigate' || !client || client.url == requestUrl) {
-    if (referrer) {
-      clientToOrigin.set(requestUrl, clientToOrigin.get(referrer) || referrer);
-    }
-    if (client && client.url) {
-      clientToOrigin.set(
-        requestUrl,
-        clientToOrigin.get(client.url) || referrer
-      );
-    }
-    const source = clientToOrigin.get(clientId);
-    return { source: source || requestUrl, isEditor: false };
-    /*
-    // 1. Если clientId новый (ещё не встречался)
-    if (!clientToOrigin.has(clientId)) {
-      // Проверяем, есть ли в urlToClient запись для referrer
-      const clientIdFromReferrer = urlToClient.get(referrer);
-      
-      if (clientIdFromReferrer && clientIdFromReferrer !== clientId) {
-        // Нашли! Этот iframe перешёл из другого iframe/окна
-        const originalSource = clientToOrigin.get(clientIdFromReferrer);
-        if (originalSource) {
-          clientToOrigin.set(clientId, originalSource);
-          console.log(`iframe[${clientId}] пришёл из: ${originalSource}`);
-        } else {
-          // Если не нашли исходный источник, используем referrer
-          clientToOrigin.set(clientId, referrer || requestUrl);
-        }
-      } else {
-        // Это новый iframe, запоминаем его начальный URL
-        clientToOrigin.set(clientId, requestUrl);
-        console.log(`Новый iframe[${clientId}] начал с: ${requestUrl}`);
-      }
-      
-      // Обновляем urlToClient для текущего URL
-      urlToClient.set(requestUrl, clientId);
-    }
-    // 2. Если clientId не новый, возвращаем сохранённый источник
-    const source = clientToOrigin.get(clientId);
-    return source || requestUrl;
-    */
+  // Проверяем, является ли клиент редактором
+  if (requestUrl.includes(SW_URL_MAGIC)) {
+    return { source: requestUrl, isEditor: true };
   }
 
-  return { source: clientToOrigin.get(clientId) || clientId, isEditor: false };
+  // Получаем и очищаем referrer
+  const rawReferrer = request.referrer || '';
+  const referrer = rawReferrer.includes(SW_URL_MAGIC) ? '' : rawReferrer;
+
+  // Получаем клиента
+  const client = await self.clients.get(event.clientId);
+  const clientId = event.clientId;
+
+  // Если клиент не найден, возвращаем базовый URL
+  if (!client) {
+    return { source: requestUrl, isEditor: false };
+  }
+
+  const clientUrl = client.url;
+
+  // Проверяем, является ли клиент редактором
+  if (clientUrl.includes(SW_URL_MAGIC)) {
+    return { source: clientUrl, isEditor: true };
+  }
+
+  // Обрабатываем навигационные запросы
+  const isNavigationRequest = request.mode === 'navigate'; // first request in site
+  const isSameOrigin = clientUrl === requestUrl; // first request in site
+
+  if (isNavigationRequest || isSameOrigin) {
+    // clientId и client скорее всего тут будут ещё указывать на прошлого клиента
+    // так как при переходе на новую страницу клиент запроашивающий новую страницу ещё старый
+    // так что если это не первый зарпос, то clientUrl == referrer
+    // по сути переход clientUrl (referrer) -> requestUrl
+    updateClientOriginMapping(clientUrl, requestUrl, referrer, client);
+
+    const source =
+      clientToOrigin.get(clientId) ||
+      clientToOrigin.get(clientUrl) ||
+      requestUrl;
+    return { source, isEditor: false };
+  }
+
+  // Для остальных запросов
+  const source =
+    clientToOrigin.get(clientId) || clientToOrigin.get(clientUrl) || clientUrl;
+  clientToOrigin.set(clientId, source);
+  console.log(clientToOrigin.get(clientId));
+  return { source, isEditor: false };
+}
+
+/**
+ * Обновляет маппинг клиент -> источник
+ * @param {string} clientUrl - URL клиента
+ * @param {string} requestUrl - URL запрашиваемый
+ * @param {string} referrer - Referrer запроса
+ * @param {Client} client - Объект клиента
+ */
+function updateClientOriginMapping(clientUrl, requestUrl, referrer, client) {
+  // Если есть referrer, используем его источник
+  if (referrer) {
+    const referrerOrigin = clientToOrigin.get(referrer) || referrer;
+    clientToOrigin.set(clientUrl, referrerOrigin);
+  }
+
+  // Если у клиента есть URL, используем его источник
+  if (client && client.url) {
+    const clientOrigin = clientToOrigin.get(client.url) || client.url;
+    if (requestUrl !== clientOrigin) {
+      clientToOrigin.set(requestUrl, clientOrigin);
+    }
+  }
 }
 
 self.addEventListener('fetch', event => {
@@ -99,9 +123,14 @@ self.addEventListener('fetch', event => {
   }
 
   // Игнорируем запросы к /editor и сам service worker
-  if (path.startsWith('/editor') || path.includes('sw.js')) {
+  if (path.startsWith('/sw.js')) {
     return;
   }
+
+  if (path.includes(SW_URL_MAGIC)) {
+    return;
+  }
+
   event.respondWith(
     determineIframeSource(event).then(({ source, isEditor }) =>
       isEditor ? fetch(event.request) : handleFetchViaBroadcast(event, source)
