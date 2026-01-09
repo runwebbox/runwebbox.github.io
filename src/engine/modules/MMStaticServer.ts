@@ -50,7 +50,7 @@ export default class StaticServer implements MachineModule {
     this.tcpParser = new TCPParser(
       mac,
       ip,
-      (packet: Packet) => (console.log(packet),this.sendPacket(packet, 0)),
+      (packet: Packet) => (console.log(packet), this.sendPacket(packet, 0)),
       [this.port], // Открываем HTTP порт
       this.handleHTTPRequest.bind(this) // Колбэк для обработки HTTP данных
     );

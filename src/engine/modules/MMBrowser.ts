@@ -51,7 +51,7 @@ export class BrowserModule implements MachineModule {
     this.tcpParser = new TCPParser(
       macBytes,
       ipBytes,
-      (packet: Packet) => (console.log(packet),sendPacketBind(packet, 0)),
+      (packet: Packet) => (console.log(packet), sendPacketBind(packet, 0)),
       [], // Серверные порты (браузер не принимает входящие соединения)
       this.handleIncomingData.bind(this) // Callback для входящих данных
     );

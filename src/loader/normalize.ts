@@ -119,7 +119,7 @@ function createDefaultConfig(fileSystem: FSEntry): WebBoxConfig {
           ip: [192, 168, 1, 1],
           mac: randomMac(),
           path: '/',
-          showDirectoryListing: true
+          showDirectoryListing: true,
         },
         {
           type: 'V86',
@@ -127,13 +127,28 @@ function createDefaultConfig(fileSystem: FSEntry): WebBoxConfig {
           ip: [192, 168, 1, 50],
           mac: randomMac(),
           path: '/',
-          memory: 128
+          memory: 512,
         },
       ],
       pipelines: [
-        {source_id: 0, source_port: 0, destination_id: 1, destination_port: 0},
-        {source_id: 0, source_port: 0, destination_id: 2, destination_port: 0},
-        {source_id: 1, source_port: 0, destination_id: 2, destination_port: 0},
+        {
+          source_id: 0,
+          source_port: 0,
+          destination_id: 1,
+          destination_port: 0,
+        },
+        {
+          source_id: 0,
+          source_port: 0,
+          destination_id: 2,
+          destination_port: 0,
+        },
+        {
+          source_id: 1,
+          source_port: 0,
+          destination_id: 2,
+          destination_port: 0,
+        },
       ],
       default_browser: 0,
     },

@@ -18,7 +18,7 @@ const BrowserPreview: React.FC<BrowserPreviewProps> = ({ machineId }) => {
     const machine = config.machines.find(m => m.id === machineId);
 
     if (machine && machine.type === 'browser') {
-      setUrl('/?mac='+machine.mac);
+      setUrl('/?mac=' + machine.mac);
     }
   }, [engine, machineId]);
 

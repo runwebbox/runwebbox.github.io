@@ -424,21 +424,21 @@ export class TCPParser implements ITCPParser {
       if (tcp.ackn === connection.localSeq + 1) {
         connection.state = 'established';
         connection.remoteSeq = tcp.seq; // Запоминаем seq сервера
-        
+
         this.sendTCPPacket(
-            packet.eth.src,
-            remoteIP,
-            localPort,
-            remotePort,
-            connection.localSeq + 1,  // Seq = localSeq + 1 (SYN занял 1 байт)
-            tcp.seq + 1,    // Ack = remoteSeq + 1 (SYN занял 1 байт)
-            false,          // SYN = false
-            true,           // ACK = true
-            false,          // FIN = false
-            false,          // RST = false
-            false,          // PSH = false
-            connection.windowSize,// Window size
-            undefined       // Данных нет
+          packet.eth.src,
+          remoteIP,
+          localPort,
+          remotePort,
+          connection.localSeq + 1, // Seq = localSeq + 1 (SYN занял 1 байт)
+          tcp.seq + 1, // Ack = remoteSeq + 1 (SYN занял 1 байт)
+          false, // SYN = false
+          true, // ACK = true
+          false, // FIN = false
+          false, // RST = false
+          false, // PSH = false
+          connection.windowSize, // Window size
+          undefined // Данных нет
         );
       } else {
         console.error('Invalid ACK number in SYN-ACK');
@@ -499,7 +499,7 @@ export class TCPParser implements ITCPParser {
     if (tcp.fin) {
       if (connection.state === TCP_STATE_ESTABLISHED) {
         connection.state = TCP_STATE_CLOSE_WAIT;
-        
+
         this.dataCallback(
           remoteIP,
           remotePort,
@@ -791,5 +791,277 @@ export class TCPParser implements ITCPParser {
    */
   private ipToString(ip: Uint8Array): string {
     return `${ip[0]}.${ip[1]}.${ip[2]}.${ip[3]}`;
+  }
+}
+
+const ETH_HEADER_SIZE = 14;
+const ETHERTYPE_IPV4 = 0x0800;
+const ETHERTYPE_ARP = 0x0806;
+const ETHERTYPE_IPV6 = 0x86dd;
+const IPV4_PROTO_ICMP = 1;
+const IPV4_PROTO_TCP = 6;
+const IPV4_PROTO_UDP = 17;
+
+function a2ethaddr(bytes: Uint8Array) {
+  return [0, 1, 2, 3, 4, 5]
+    .map(i => bytes[i].toString(16))
+    .map(x => (x.length === 1 ? '0' + x : x))
+    .join(':');
+}
+
+function parse_icmp(data: Uint8Array, o: Packet) {
+  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+  const icmp = {
+    type: view.getUint8(0),
+    code: view.getUint8(1),
+    checksum: view.getUint16(2),
+    data: data.subarray(4),
+  };
+  o.icmp = icmp;
+}
+function parse_tcp(data: Uint8Array, o: Packet) {
+  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+
+  const flags = view.getUint8(13);
+  const tcp: TCPHeader = {
+    sport: view.getUint16(0),
+    dport: view.getUint16(2),
+    seq: view.getUint32(4),
+    ackn: view.getUint32(8),
+    doff: view.getUint8(12) >> 4,
+    winsize: view.getUint16(14),
+    checksum: view.getUint16(16),
+    urgent: view.getUint16(18),
+    fin: !!(flags & 0x01),
+    syn: !!(flags & 0x02),
+    rst: !!(flags & 0x04),
+    psh: !!(flags & 0x08),
+    ack: !!(flags & 0x10),
+    urg: !!(flags & 0x20),
+    ece: !!(flags & 0x40),
+    cwr: !!(flags & 0x80),
+  };
+
+  o.tcp = tcp;
+
+  const offset = tcp.doff * 4;
+  o.tcp_data = data.subarray(offset);
+}
+function parse_dhcp(data: Uint8Array, o: Packet) {
+  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+  //const bootpo  = data.subarray(44,44+192);
+  const dhcp = {
+    op: view.getUint8(0),
+    htype: view.getUint8(1),
+    hlen: view.getUint8(2),
+    hops: view.getUint8(3),
+    xid: view.getUint32(4),
+    secs: view.getUint16(8),
+    flags: view.getUint16(10),
+    ciaddr: view.getUint32(12),
+    yiaddr: view.getUint32(16),
+    siaddr: view.getUint32(20),
+    giaddr: view.getUint32(24),
+    chaddr: data.subarray(28, 28 + 16),
+    magic: view.getUint32(236),
+    options: [] as Uint8Array[],
+  };
+
+  const options = data.subarray(240);
+  for (let i = 0; i < options.length; ++i) {
+    const start = i;
+    const op = options[i];
+    if (op === 0) continue;
+    ++i;
+    const len = options[i];
+    i += len;
+    dhcp.options.push(options.subarray(start, start + len + 2));
+  }
+
+  o.dhcp = dhcp;
+  o.dhcp_options = dhcp.options;
+}
+function parse_dns(data: Uint8Array, o: Packet) {
+  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+  const dns: Packet['dns'] = {
+    id: view.getUint16(0),
+    flags: view.getUint16(2),
+    questions: [],
+    answers: [],
+  };
+
+  const qdcount = view.getUint16(4);
+  const ancount = view.getUint16(6);
+  //const nscount = view.getUint16(8);
+  //const arcount = view.getUint16(10);
+
+  let offset = 12;
+  function read_dstr() {
+    const o = [];
+    let len;
+    do {
+      len = view.getUint8(offset);
+      o.push(
+        new TextDecoder().decode(data.subarray(offset + 1, offset + 1 + len))
+      );
+      offset += len + 1;
+    } while (len > 0);
+    return o;
+  }
+
+  for (let i = 0; i < qdcount; i++) {
+    dns.questions.push({
+      name: read_dstr(),
+      type: view.getInt16(offset),
+      class: view.getInt16(offset + 2),
+    });
+    offset += 4;
+  }
+  for (let i = 0; i < ancount; i++) {
+    const ans = {
+      name: read_dstr(),
+      type: view.getInt16(offset),
+      class: view.getUint16(offset + 2),
+      ttl: view.getUint32(offset + 4),
+      data: new Uint8Array() as Uint8Array<ArrayBufferLike>,
+    };
+    offset += 8;
+    const rdlen = view.getUint16(offset);
+    offset += 2;
+    ans.data = data.subarray(offset, offset + rdlen);
+    offset += rdlen;
+    dns.answers.push(ans);
+  }
+  o.dns = dns;
+}
+
+function parse_ntp(data: Uint8Array, o: Packet) {
+  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+  o.ntp = {
+    flags: view.getUint8(0),
+    stratum: view.getUint8(1),
+    poll: view.getUint8(2),
+    precision: view.getUint8(3),
+    root_delay: view.getUint32(4),
+    root_disp: view.getUint32(8),
+    ref_id: view.getUint32(12),
+    ref_ts_i: view.getUint32(16),
+    ref_ts_f: view.getUint32(20),
+    ori_ts_i: view.getUint32(24),
+    ori_ts_f: view.getUint32(28),
+    rec_ts_i: view.getUint32(32),
+    rec_ts_f: view.getUint32(36),
+    trans_ts_i: view.getUint32(40),
+    trans_ts_f: view.getUint32(44),
+  };
+}
+
+function parse_udp(data: Uint8Array, o: Packet) {
+  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+  const udp = {
+    sport: view.getUint16(0),
+    dport: view.getUint16(2),
+    len: view.getUint16(4),
+    checksum: view.getUint16(6),
+    data: data.subarray(8),
+    data_s: new TextDecoder().decode(data.subarray(8)),
+  };
+
+  //dbg_assert(udp.data.length + 8 == udp.len);
+  if (udp.dport === 67 || udp.sport === 67) {
+    //DHCP
+    parse_dhcp(data.subarray(8), o);
+  } else if (udp.dport === 53 || udp.sport === 53) {
+    parse_dns(data.subarray(8), o);
+  } else if (udp.dport === 123) {
+    parse_ntp(data.subarray(8), o);
+  }
+  o.udp = udp;
+}
+
+function parse_ipv4(data: Uint8Array, o: Packet): void {
+  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+
+  const version = (data[0] >> 4) & 0x0f;
+  const ihl = data[0] & 0x0f;
+
+  const tos = view.getUint8(1);
+  const len = view.getUint16(2);
+
+  const ttl = view.getUint8(8);
+  const proto = view.getUint8(9);
+  const ip_checksum = view.getUint16(10);
+
+  const ipv4 = {
+    version,
+    ihl,
+    tos,
+    len,
+    ttl,
+    proto,
+    ip_checksum,
+    src: data.subarray(12, 12 + 4),
+    dest: data.subarray(16, 16 + 4),
+  };
+
+  // Ethernet minmum packet size.
+  if (Math.max(len, 46) !== data.length) {
+    throw `ipv4 Length mismatch: ${len} != ${data.length}`;
+  }
+
+  o.ipv4 = ipv4;
+  const ipdata = data.subarray(ihl * 4, len);
+  if (proto === IPV4_PROTO_ICMP) {
+    parse_icmp(ipdata, o);
+  } else if (proto === IPV4_PROTO_TCP) {
+    parse_tcp(ipdata, o);
+  } else if (proto === IPV4_PROTO_UDP) {
+    parse_udp(ipdata, o);
+  }
+}
+function parse_arp(data: Uint8Array, o: Packet): void {
+  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+  // const hlen = data[4];
+  // const plen = data[5];
+
+  const arp = {
+    htype: view.getUint16(0),
+    ptype: view.getUint16(2),
+    oper: view.getUint16(6),
+    sha: data.subarray(8, 14),
+    spa: data.subarray(14, 18),
+    tha: data.subarray(18, 24),
+    tpa: data.subarray(24, 28),
+  };
+  o.arp = arp;
+}
+
+export function parseparse_eth(data: Uint8Array): Packet {
+  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+
+  const ethertype = view.getUint16(12);
+  const eth = {
+    ethertype: ethertype,
+    dest: data.subarray(0, 6),
+    dest_s: a2ethaddr(data.subarray(0, 6)),
+    src: data.subarray(6, 12),
+    src_s: a2ethaddr(data.subarray(6, 12)),
+  };
+
+  const o: Packet = { eth };
+
+  // TODO: Remove CRC from the end of the packet maybe?
+  const payload = data.subarray(ETH_HEADER_SIZE, data.length);
+
+  if (ethertype === ETHERTYPE_IPV4) {
+    parse_ipv4(payload, o);
+    return o;
+  } else if (ethertype === ETHERTYPE_ARP) {
+    parse_arp(payload, o);
+    return o;
+  } else if (ethertype === ETHERTYPE_IPV6) {
+    throw 'Unimplemented: ipv6';
+  } else {
+    throw 'Unknown ethertype: ' + ethertype;
   }
 }

@@ -31,7 +31,7 @@ const EngineMonitoring: React.FC = () => {
     const numerator = new Map<string, number>();
     function returnNumber(s: string) {
       numerator.set(s, (numerator.get(s) || 0) + 1);
-      return (numerator.get(s) || 1)>=2?' №'+numerator.get(s):'';
+      return (numerator.get(s) || 1) >= 2 ? ' №' + numerator.get(s) : '';
     }
     return [
       {

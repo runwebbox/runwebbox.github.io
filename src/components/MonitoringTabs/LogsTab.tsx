@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import useEngine from '../../hooks/useEngine';
 import type { logMessage, EngineEvent } from '../../engine/log';
 
-const LogsTab: React.FC<{ machineId: number; }> = ({ machineId }) => {
+const LogsTab: React.FC<{ machineId: number }> = ({ machineId }) => {
   const [inputValue, setInputValue] = useState('');
   const logsEndRef = useRef<HTMLDivElement>(null);
 
@@ -15,8 +15,12 @@ const LogsTab: React.FC<{ machineId: number; }> = ({ machineId }) => {
         console.log(event.logs);
         setLogs([...event.logs]);
       }
-    }; 
-    setLogs(engine.getMachineLogs(machineId) || [{  lvl: 'error',  log: `Machine with id ${machineId} not started` }]);
+    };
+    setLogs(
+      engine.getMachineLogs(machineId) || [
+        { lvl: 'error', log: `Machine with id ${machineId} not started` },
+      ]
+    );
     engine.addEventListener(handleEngineEvent);
 
     return () => {

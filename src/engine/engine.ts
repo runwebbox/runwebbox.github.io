@@ -83,7 +83,7 @@ export class Engine {
         this.emitEvent({
           id,
           type: 'message',
-          logs: machine.logs
+          logs: machine.logs,
         });
       }
     }
@@ -246,7 +246,7 @@ export class Engine {
   }
 
   getMachineLogs(machineId: number): logMessage[] | null {
-    if (machineId<0) return this.getLogs();
+    if (machineId < 0) return this.getLogs();
     const machine = this.machines.get(machineId);
     if (!machine) {
       return null;
@@ -283,7 +283,7 @@ export class Engine {
     this.emitEvent({
       id: -1,
       type: 'message',
-      logs: this.logs
+      logs: this.logs,
     });
   }
 
