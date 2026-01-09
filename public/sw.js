@@ -154,6 +154,7 @@ function handleResponseMessage(event) {
 
 // Обработка запроса через BroadcastChannel
 async function handleFetchViaBroadcast(event, source) {
+  console.log(event);
   if (!requestBroadcastChannel || !responseBroadcastChannel) {
     console.error('BroadcastChannels not initialized');
     activateBroadcastChannels();

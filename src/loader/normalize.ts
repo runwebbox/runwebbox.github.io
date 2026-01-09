@@ -1,5 +1,9 @@
-import { isFSDirectory, isFSFile, type FSEntry } from '../engine/fileSystem';
-import type { FileItem } from '../types/fileSystem';
+import {
+  isFSDirectory,
+  isFSFile,
+  type FSEntry,
+  type FSFile,
+} from '../engine/fileSystem';
 import type { WebBoxConfig } from '../types/webBoxConfig';
 
 /*
@@ -17,7 +21,7 @@ export function exportWebBox(fileSystem: FSEntry): WebBoxConfig {
     // Parse and use the uploaded config
     try {
       const uploadedConfig = JSON.parse(
-        configFile.content || '{}'
+        new TextDecoder().decode(configFile.content) || '{}'
       ) as WebBoxConfig;
 
       // Remove the config file from the file system
@@ -42,14 +46,14 @@ export function exportWebBox(fileSystem: FSEntry): WebBoxConfig {
 }
 
 // Helper function to find WebBoxConfig.json in the file system
-function findConfigFile(fileSystem: FSEntry): FSEntry | null {
-  function searchFiles(items: FSEntry[]): FSEntry | null {
+function findConfigFile(fileSystem: FSEntry): FSFile | null {
+  function searchFiles(items: FSEntry[]): FSFile | null {
     for (const item of items) {
-      if (item.type === 'file' && item.name === 'WebBoxConfig.json') {
+      if (isFSFile(item) && item.name === 'WebBoxConfig.json') {
         return item;
       }
-      if (item.type === 'folder' && item.children) {
-        const found = searchFiles(item.children);
+      if (isFSDirectory(item) && item.content) {
+        const found = searchFiles(item.content);
         if (found) return found;
       }
     }
@@ -89,8 +93,14 @@ function removeConfigFile(fileSystem: FSEntry): FSEntry {
   };
 }
 
+function randomMac() {
+  return '0X:XX:XX:XX:XX:XX'.replace(/X/g, () =>
+    '0123456789ABCDEF'.charAt(Math.floor(Math.random() * 16))
+  );
+}
+
 // Helper function to create default configuration
-function createDefaultConfig(fileSystem: FileItem): WebBoxConfig {
+function createDefaultConfig(fileSystem: FSEntry): WebBoxConfig {
   return {
     version: '1.0.0',
     file_system: fileSystem,
@@ -99,10 +109,31 @@ function createDefaultConfig(fileSystem: FileItem): WebBoxConfig {
         {
           type: 'browser',
           id: 0,
-          listeners: ['*'],
-          ip: [192, 168, 1, 1],
-          path: '/',
+          ip: [192, 168, 1, 100],
+          url: '192.168.1.1/',
+          mac: randomMac(),
         },
+        {
+          type: 'static_server',
+          id: 1,
+          ip: [192, 168, 1, 1],
+          mac: randomMac(),
+          path: '/',
+          showDirectoryListing: true
+        },
+        {
+          type: 'V86',
+          id: 2,
+          ip: [192, 168, 1, 50],
+          mac: randomMac(),
+          path: '/',
+          memory: 128
+        },
+      ],
+      pipelines: [
+        {source_id: 0, source_port: 0, destination_id: 1, destination_port: 0},
+        {source_id: 0, source_port: 0, destination_id: 2, destination_port: 0},
+        {source_id: 1, source_port: 0, destination_id: 2, destination_port: 0},
       ],
       default_browser: 0,
     },

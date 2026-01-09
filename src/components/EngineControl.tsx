@@ -13,7 +13,7 @@ export const EngineControl: React.FC = () => {
       }
     };
 
-    engine.addEventLisener(handleStatusUpdate);
+    engine.addEventListener(handleStatusUpdate);
 
     return () => {
       engine.removeEventListener(handleStatusUpdate);

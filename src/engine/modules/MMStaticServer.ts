@@ -50,7 +50,7 @@ export default class StaticServer implements MachineModule {
     this.tcpParser = new TCPParser(
       mac,
       ip,
-      (packet: Packet) => this.sendPacket(packet, 0),
+      (packet: Packet) => (console.log(packet),this.sendPacket(packet, 0)),
       [this.port], // Открываем HTTP порт
       this.handleHTTPRequest.bind(this) // Колбэк для обработки HTTP данных
     );
@@ -485,7 +485,7 @@ export default class StaticServer implements MachineModule {
       }
     }
 
-    return '/' + result.join('/');
+    return result.join('/');
   }
 
   /**
@@ -495,8 +495,8 @@ export default class StaticServer implements MachineModule {
     const normalized = this.normalizePath(path);
     // Проверяем, что путь не выходит за пределы корневой директории
     return (
-      !normalized.startsWith('/../') &&
-      normalized !== '/..' &&
+      !normalized.startsWith('../') &&
+      normalized !== '..' &&
       !normalized.includes('../')
     );
   }

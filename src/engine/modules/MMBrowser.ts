@@ -51,7 +51,7 @@ export class BrowserModule implements MachineModule {
     this.tcpParser = new TCPParser(
       macBytes,
       ipBytes,
-      (packet: Packet) => sendPacketBind(packet, 0),
+      (packet: Packet) => (console.log(packet),sendPacketBind(packet, 0)),
       [], // Серверные порты (браузер не принимает входящие соединения)
       this.handleIncomingData.bind(this) // Callback для входящих данных
     );
@@ -106,7 +106,7 @@ export class BrowserModule implements MachineModule {
     if (type !== 'FETCH_REQUEST') return;
 
     // Проверяем, что запрос предназначен для нашего браузера
-    if (clientId !== this.config.url) {
+    if (!clientId.includes(this.config.mac)) {
       return;
     }
 
@@ -138,7 +138,7 @@ export class BrowserModule implements MachineModule {
 
     // Определяем удаленный порт (по умолчанию 80 для HTTP)
     let remotePort = 80;
-    const urlMatch = url.match(/:\/(\/)?([^:/]+)(:(\d+))?/);
+    const urlMatch = this.config.url.match(/:\/(\/)?([^:/]+)(:(\d+))?/);
     if (urlMatch && urlMatch[4]) {
       remotePort = parseInt(urlMatch[4]);
     }

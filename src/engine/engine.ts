@@ -13,6 +13,7 @@ import type {
 import { createFileSystemAPI } from './fileSystemAPI.ts';
 import type { FileSystemAPI } from './fileSystem.ts';
 import type { logMessage, EngineEvent, LogLvls, EngineStatus } from './log.ts';
+import type { DeepReadonly } from '../loader/types.ts';
 
 type MachineType = 'V86' | 'internet' | 'static_server' | 'browser';
 
@@ -44,7 +45,7 @@ export class Engine {
     }, 1000);
   }
 
-  public addEventLisener(f: (event: EngineEvent) => void) {
+  public addEventListener(f: (event: EngineEvent) => void) {
     this.eventListeners.add(f);
   }
 
@@ -73,14 +74,16 @@ export class Engine {
     }
     switch (type) {
       case 'log': {
-        const logEntry = `[${new Date().toISOString()}] ${data.log}`;
-        this.logs.push(data);
-        while (this.logs.length > 100) this.logs.shift();
+        const logEntry = {
+          lvl: data.lvl,
+          log: `[${new Date().toISOString()}] ${data.log}`,
+        };
+        machine.logs.push(logEntry);
+        while (machine.logs.length > 100) machine.logs.shift();
         this.emitEvent({
           id,
           type: 'message',
-          lvl: (data as logMessage).lvl,
-          data: logEntry,
+          logs: machine.logs
         });
       }
     }
@@ -94,14 +97,14 @@ export class Engine {
   ): Promise<MachineModule> {
     switch (config.type) {
       case 'V86': {
-        const V86Module = await import('./modules/V86.ts');
+        const V86Module = await import('./modules/MMV86.ts');
         return new V86Module.default(config, fileSystem, sendPacket, sendEvent);
       }
       //case 'internet':
       //  const networkModule = await import('./modules/network');
       //  return networkModule.default;
       case 'static_server': {
-        const staticServerModule = await import('./modules/StaticServer.ts');
+        const staticServerModule = await import('./modules/MMStaticServer.ts');
         return new staticServerModule.default(
           config,
           fileSystem,
@@ -110,7 +113,7 @@ export class Engine {
         );
       }
       case 'browser': {
-        const browserModule = await import('./modules/Browser');
+        const browserModule = await import('./modules/MMBrowser.ts');
         return new browserModule.default(config, sendPacket, sendEvent);
       }
       default:
@@ -205,7 +208,7 @@ export class Engine {
         this.log(`Failed to start machine ${id}: ${error}`, 'error');
       }
     }
-    await new Promise(r => setTimeout(r, 1000));
+    await new Promise(r => setTimeout(r, 100));
 
     this.status = 'running';
     this.emitEvent({ type: 'status_update', data: this.status });
@@ -234,17 +237,19 @@ export class Engine {
         this.log(`Error stopping machine ${machine.id}: ${error}`, 'error');
       }
     }
-    await new Promise(r => setTimeout(r, 1000));
+    await new Promise(r => setTimeout(r, 100));
 
     this.machines.clear();
     this.status = 'stopped';
     this.emitEvent({ type: 'status_update', data: this.status });
+    this.log('==================');
   }
 
-  getMachineLogs(machineId: number): logMessage[] {
+  getMachineLogs(machineId: number): logMessage[] | null {
+    if (machineId<0) return this.getLogs();
     const machine = this.machines.get(machineId);
     if (!machine) {
-      throw new Error(`Machine ${machineId} not found`);
+      return null;
     }
 
     return machine.logs;
@@ -266,16 +271,19 @@ export class Engine {
     return this.status;
   }
 
+  getConfig(): DeepReadonly<WebBoxConfig['config']> {
+    return this.config.config;
+  }
+
   private log(s: string, lvl: LogLvls = 'info') {
-    const logEntry = `[${new Date().toISOString()}] ${s}`;
-    this.logs.push({ log: logEntry, lvl });
+    const logEntry = { log: `[${new Date().toISOString()}] ${s}`, lvl };
+    this.logs.push(logEntry);
     while (this.logs.length > 1000) this.logs.shift();
 
     this.emitEvent({
       id: -1,
       type: 'message',
-      lvl: lvl,
-      data: logEntry,
+      logs: this.logs
     });
   }
 

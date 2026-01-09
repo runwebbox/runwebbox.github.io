@@ -32,25 +32,19 @@ interface FSEventEdit {
   content: Uint8Array;
 }
 
-interface FSEventMove {
-  type: 'move';
-  entry_type: 'directory' | 'file';
-  old_filename: string;
-  new_filename: string;
-}
-
 interface FSEventDelete {
   type: 'delete';
   entry_type: 'directory' | 'file';
   path: string;
 }
 
-export type FSEvent = FSEventCreate | FSEventEdit | FSEventMove | FSEventDelete;
+export type FSEvent = FSEventCreate | FSEventEdit | FSEventDelete;
 
 export interface FileSystemAPI {
   addEventListener: (f: (event: FSEvent) => void) => void;
 
   removeEventListener: (f: (event: FSEvent) => void) => void;
+
   /**
    * Читает содержимое файла по указанному пути
    * @param path - Путь к файлу (например: "/documents/file.txt")

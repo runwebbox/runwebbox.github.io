@@ -1,12 +1,7 @@
 import { createContext, useContext, type ReactNode } from 'react';
-import type { FileItem } from '../types/fileSystem';
 
 export interface FileSystemContextType {
-  fileSystem: FileItem | null;
   openTabs: string[];
-  getFile: (id: string) => FileItem | null;
-  getFileContent: (id: string) => string;
-  updateFileContent: (id: string, content: string) => void;
   closeTab: (id: string) => void;
   currentProject: string;
 }

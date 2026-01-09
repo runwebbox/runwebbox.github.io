@@ -420,12 +420,38 @@ export class TCPParser implements ITCPParser {
     if (!connection) {
       return;
     }
+    if (connection.state === TCP_STATE_SYN_SENT && tcp.syn && tcp.ack) {
+      if (tcp.ackn === connection.localSeq + 1) {
+        connection.state = 'established';
+        connection.remoteSeq = tcp.seq; // Запоминаем seq сервера
+        
+        this.sendTCPPacket(
+            packet.eth.src,
+            remoteIP,
+            localPort,
+            remotePort,
+            connection.localSeq + 1,  // Seq = localSeq + 1 (SYN занял 1 байт)
+            tcp.seq + 1,    // Ack = remoteSeq + 1 (SYN занял 1 байт)
+            false,          // SYN = false
+            true,           // ACK = true
+            false,          // FIN = false
+            false,          // RST = false
+            false,          // PSH = false
+            connection.windowSize,// Window size
+            undefined       // Данных нет
+        );
+      } else {
+        console.error('Invalid ACK number in SYN-ACK');
+      }
+    }
 
     // Обработка ACK на SYN-ACK
     if (tcp.ack && !tcp.syn && connection.state === TCP_STATE_SYN_RECEIVED) {
       if (tcp.ackn === connection.localSeq + 1) {
         connection.state = TCP_STATE_ESTABLISHED;
         connection.remoteAck = tcp.ackn;
+      } else {
+        console.error('Invalid ACK number');
       }
       return;
     }
@@ -437,7 +463,7 @@ export class TCPParser implements ITCPParser {
       packet.tcp_data
     ) {
       // Проверяем sequence number
-      if (tcp.seq === connection.remoteAck) {
+      if (tcp.seq === connection.remoteSeq) {
         // Отправляем ACK на полученные данные
         this.sendTCPPacket(
           packet.eth.src,
@@ -445,7 +471,7 @@ export class TCPParser implements ITCPParser {
           localPort,
           remotePort,
           connection.localSeq,
-          connection.remoteAck + packet.tcp_data.length,
+          connection.remoteSeq + packet.tcp_data.length,
           false,
           true,
           false,
@@ -456,7 +482,7 @@ export class TCPParser implements ITCPParser {
         );
 
         // Обновляем sequence number
-        connection.remoteAck += packet.tcp_data.length;
+        connection.remoteSeq += packet.tcp_data.length;
 
         // Вызываем callback с данными
         this.dataCallback(
@@ -473,6 +499,14 @@ export class TCPParser implements ITCPParser {
     if (tcp.fin) {
       if (connection.state === TCP_STATE_ESTABLISHED) {
         connection.state = TCP_STATE_CLOSE_WAIT;
+        
+        this.dataCallback(
+          remoteIP,
+          remotePort,
+          localPort,
+          new Uint8Array([]),
+          true // EOF
+        );
 
         // Отправляем ACK на FIN
         this.sendTCPPacket(
@@ -502,7 +536,7 @@ export class TCPParser implements ITCPParser {
         remotePort,
         localPort,
         new Uint8Array([]),
-        true
+        true // EOF
       );
       this.tcpConnections.delete(connKey);
     }

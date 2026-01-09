@@ -1,3 +1,5 @@
+import type { WebBoxConfig } from '../types/webBoxConfig';
+
 export type LogLvls = 'info' | 'warning' | 'error';
 
 export interface logMessage {
@@ -21,8 +23,7 @@ export type MachineStatus =
 interface EventLog {
   type: 'message';
   id: number; // -1 for system
-  lvl: LogLvls;
-  data: string;
+  logs: logMessage[];
 }
 
 interface EventStatusUpdate {
@@ -30,4 +31,9 @@ interface EventStatusUpdate {
   data: EngineStatus;
 }
 
-export type EngineEvent = EventLog | EventStatusUpdate;
+interface EventConfigUpdate {
+  type: 'config_update';
+  data: WebBoxConfig;
+}
+
+export type EngineEvent = EventLog | EventStatusUpdate | EventConfigUpdate;

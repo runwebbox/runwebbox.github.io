@@ -4,7 +4,7 @@
 */
 @import 'tailwindcss';
 
-@layer utilities {
+@layer base {
   html,
   body,
   div,

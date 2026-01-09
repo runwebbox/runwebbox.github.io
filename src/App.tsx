@@ -3,12 +3,12 @@ import { Provider } from 'react-redux';
 import { store } from './store/store';
 import LeftSidebar from './components/LeftSidebar';
 import EditorArea from './components/EditorArea';
-import BrowserPreview from './components/BrowserPreview';
 import { Engine } from './engine/engine';
 import TabManager from './components/TabManager';
 import { EngineProvider } from './providers/EngineProvider';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { EngineControl } from './components/EngineControl';
+import EngineMonitoring from './components/EngineMonitoring';
 
 interface AppProps {
   engine: Engine;
@@ -41,7 +41,7 @@ const App: React.FC<AppProps> = (props: AppProps) => {
 
               <PanelResizeHandle className="w-1 bg-zinc-800 hover:bg-zinc-700 transition-colors" />
               <Panel defaultSize={40} minSize={30} className="bg-zinc-900">
-                <BrowserPreview />
+                <EngineMonitoring />
               </Panel>
             </PanelGroup>
           </div>
