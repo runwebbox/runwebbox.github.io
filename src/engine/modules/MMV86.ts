@@ -91,7 +91,7 @@ export default class V86Module implements MachineModule {
         console.log(e);
       }
     });
-    this.v86Instance.serial0_send('./networking.sh\n');
+    this.v86Instance.serial0_send('ls\n');
 
     while (!this.output_buffer.includes(':~# ')) {
       await new Promise(r => setTimeout(r, 1000));
