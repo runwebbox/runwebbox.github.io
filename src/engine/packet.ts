@@ -24,8 +24,10 @@ export interface IPv4Header {
   ttl: number;
   proto: number;
   ip_checksum: number;
+  df: boolean; // Don't Fragment
   src: Uint8Array;
   dest: Uint8Array;
+  opt: Uint8Array;
 }
 
 export interface TCPHeader {
@@ -45,6 +47,7 @@ export interface TCPHeader {
   urg: boolean;
   ece: boolean;
   cwr: boolean;
+  opt: Uint8Array;
 }
 
 export interface UDPHeader {

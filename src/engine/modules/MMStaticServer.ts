@@ -95,10 +95,10 @@ export default class StaticServer implements MachineModule {
       // Декодируем HTTP запрос
       const requestText = new TextDecoder().decode(data);
       const request = this.parseHTTPRequest(requestText);
-
+      console.log(request);
       if (!request) {
         // Некорректный запрос
-        this.sendHTTPError(ip, remotePort, localPort, 400, 'Bad Request');
+        //this.sendHTTPError(ip, remotePort, localPort, 400, 'Bad Request');
         return;
       }
 

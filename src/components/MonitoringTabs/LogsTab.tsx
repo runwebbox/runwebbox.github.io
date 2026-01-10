@@ -12,7 +12,7 @@ const LogsTab: React.FC<{ machineId: number }> = ({ machineId }) => {
   useEffect(() => {
     const handleEngineEvent = (event: EngineEvent) => {
       if (event.type === 'message' && event.id === machineId) {
-        console.log(event.logs);
+        //console.log(event.logs);
         setLogs([...event.logs]);
       }
     };
@@ -34,7 +34,7 @@ const LogsTab: React.FC<{ machineId: number }> = ({ machineId }) => {
   }, [logs]);
 
   const handleSendInput = useCallback(() => {
-    if (machineId !== null && inputValue.trim()) {
+    if (machineId !== null) {
       try {
         engine.sendEventToMachine(machineId, 'send_input', inputValue.trim());
         setInputValue('');
@@ -108,7 +108,7 @@ const LogsTab: React.FC<{ machineId: number }> = ({ machineId }) => {
           />
           <button
             onClick={handleSendInput}
-            disabled={!inputValue.trim() || machineId === null}
+            disabled={machineId === null}
             className="px-4 py-2 bg-blue-600 rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             Send

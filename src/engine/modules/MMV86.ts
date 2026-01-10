@@ -8,24 +8,24 @@ import type { FileSystemAPI } from '../fileSystem';
 import { V86 } from 'v86';
 import type { V86Config } from '../../types/webBoxConfig';
 import type { LogLvls } from '../log';
-import { parseparse_eth } from '../TCPParser';
+import { build_eth, parse_eth } from '../TCPParser';
 
 export default class V86Module implements MachineModule {
   private config: V86Config;
   //private fileSystem: FileSystemAPI;
-  //private sendPacketCallback: (packet: Packet) => void;
+  private sendPacketCallback: (packet: Packet, inter: number) => void;
   private log: (s: string, lvl?: LogLvls) => void;
   private output_buffer: string = '';
   private v86Instance: V86 | null = null;
   constructor(
     config: V86Config,
     _fileSystem: FileSystemAPI,
-    _sendPacket: (packet: Packet, port: number) => void,
+    sendPacket: (packet: Packet, inter: number) => void,
     sendEvent: EventFromMachineFunction
   ) {
     this.config = config;
     //this.fileSystem = fileSystem;
-    //this.sendPacketCallback = sendPacket;
+    this.sendPacketCallback = sendPacket;
     this.log = (log, lvl = 'info') => sendEvent('log', { log, lvl });
   }
 
@@ -86,12 +86,15 @@ export default class V86Module implements MachineModule {
     console.log(this.v86Instance);
     this.v86Instance.add_listener('net0-send', (p: Uint8Array) => {
       try {
-        console.log(parseparse_eth(p));
+        const packet = parse_eth(p);
+        console.log('V86 - send', p);
+        console.log(packet);
+        this.sendPacketCallback(packet, 0);
       } catch (e) {
         console.log(e);
       }
     });
-    this.v86Instance.serial0_send('ls\n');
+    this.v86Instance.serial0_send('ip link set dev eth0 address '+this.config.mac+'; ip link set eth0 up; ifconfig eth0 '+this.config.ip.join('.')+' netmask 255.255.255.0 broadcast 192.168.1.255\n');
 
     while (!this.output_buffer.includes(':~# ')) {
       await new Promise(r => setTimeout(r, 1000));
@@ -108,7 +111,15 @@ export default class V86Module implements MachineModule {
   }
 
   handlePacket(packet: Packet): void {
-    this.log(`Received packet: ${JSON.stringify(packet)}`);
+    if(JSON.stringify(parse_eth(build_eth(packet))) != JSON.stringify(packet)) {
+      console.error(JSON.stringify(parse_eth(build_eth(packet))), '!=', JSON.stringify(packet));
+    }
+
+    const eth = build_eth(packet);
+    //this.log(`Received packet: ${JSON.stringify(packet)}`);
+    //this.log(`Received packet: ${eth.join(',')}`);
+    console.log(`Received packet: ${eth.join(',')}`);
+    this.v86Instance!.v86.cpu.bus.listeners['net0-receive'][0].fn(eth);
   }
 
   handleEvent<T extends keyof EventMapToMachine>(
@@ -118,7 +129,9 @@ export default class V86Module implements MachineModule {
     if (!this.v86Instance) return;
     switch (type) {
       case 'send_input':
-        this.v86Instance.serial0_send(data + '\n');
+        if (data=='^C') 
+          this.v86Instance.serial0_send('\u0003');
+        else this.v86Instance.serial0_send(data + '\n');
         //this.v86Instance!.keyboard_send_text(data);
         this.log(`Sent input: ${data}`);
         return;

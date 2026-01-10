@@ -152,6 +152,7 @@ export class Engine {
           try {
             targetMachine.module.handlePacket(packet, targetPort);
           } catch (error) {
+            console.error(`Error in machine ${targetId}: ${error}`, 'error');
             this.log(`Error in machine ${targetId}: ${error}`, 'error');
           }
         }

@@ -142,16 +142,16 @@ export class BrowserModule implements MachineModule {
     if (urlMatch && urlMatch[4]) {
       remotePort = parseInt(urlMatch[4]);
     }
-
+    remotePort = 3000;
     // Преобразуем целевой IP в Uint8Array
-    const remoteIP = new Uint8Array([192, 168, 1, 1]);
+    const remoteIP = new Uint8Array([192, 168, 1, 50]);
 
     // Создаем HTTP запрос
     const httpRequest = this.buildHTTPRequest(
       method,
       path,
       headers,
-      remoteIP.join('.')
+      remoteIP.join('.') + (remotePort==80?'':':'+remotePort)
     );
     const requestData = new TextEncoder().encode(httpRequest);
 
@@ -188,17 +188,17 @@ export class BrowserModule implements MachineModule {
   private buildHTTPRequest(
     method: string,
     path: string,
-    headers: Record<string, string>,
+    _headers: Record<string, string>,
     host: string
   ): string {
     const defaultHeaders: Record<string, string> = {
       Host: host,
-      Connection: 'close',
-      'User-Agent': 'BrowserModule/1.0',
+      'User-Agent': 'RunWebBrowser',
       Accept: '*/*',
+      Connection: 'close',
     };
 
-    const allHeaders = { ...defaultHeaders, ...headers };
+    const allHeaders = { ...defaultHeaders };
     let request = `${method.toUpperCase()} ${path} HTTP/1.1\r\n`;
 
     for (const [key, value] of Object.entries(allHeaders)) {

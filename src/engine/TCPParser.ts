@@ -388,7 +388,7 @@ export class TCPParser implements ITCPParser {
       connection = {
         state: TCP_STATE_SYN_RECEIVED,
         localSeq: this.tcpSeq++,
-        remoteSeq: tcp.seq,
+        remoteSeq: tcp.seq + 1,
         localAck: tcp.seq + 1,
         remoteAck: 0,
         windowSize: 64240,
@@ -422,23 +422,24 @@ export class TCPParser implements ITCPParser {
     }
     if (connection.state === TCP_STATE_SYN_SENT && tcp.syn && tcp.ack) {
       if (tcp.ackn === connection.localSeq + 1) {
-        connection.state = 'established';
-        connection.remoteSeq = tcp.seq; // Запоминаем seq сервера
-
+        connection.state = TCP_STATE_ESTABLISHED;
+        connection.remoteSeq = tcp.seq + 1; // SYN занимает 1 байт
+        connection.remoteAck = tcp.ackn;
+        
         this.sendTCPPacket(
           packet.eth.src,
           remoteIP,
           localPort,
           remotePort,
           connection.localSeq + 1, // Seq = localSeq + 1 (SYN занял 1 байт)
-          tcp.seq + 1, // Ack = remoteSeq + 1 (SYN занял 1 байт)
+          connection.remoteSeq,    // Ack = remoteSeq (уже учтен SYN)
           false, // SYN = false
-          true, // ACK = true
+          true,  // ACK = true
           false, // FIN = false
           false, // RST = false
           false, // PSH = false
-          connection.windowSize, // Window size
-          undefined // Данных нет
+          connection.windowSize,
+          undefined
         );
       } else {
         console.error('Invalid ACK number in SYN-ACK');
@@ -596,6 +597,8 @@ export class TCPParser implements ITCPParser {
         ip_checksum: 0,
         src: this.ip,
         dest: destIP,
+        df: false,
+        opt: new Uint8Array([])
       },
       icmp: {
         type: 0, // Echo reply
@@ -643,6 +646,7 @@ export class TCPParser implements ITCPParser {
       urg: false,
       ece: false,
       cwr: false,
+      opt: new Uint8Array([])
     };
 
     const tcpLength = TCP_HEADER_SIZE + (data ? data.length : 0);
@@ -664,6 +668,8 @@ export class TCPParser implements ITCPParser {
         ip_checksum: 0,
         src: this.ip,
         dest: destIP,
+        df: false,
+        opt: new Uint8Array([])
       },
       tcp: tcpHeader,
       tcp_data: data,
@@ -802,13 +808,6 @@ const IPV4_PROTO_ICMP = 1;
 const IPV4_PROTO_TCP = 6;
 const IPV4_PROTO_UDP = 17;
 
-function a2ethaddr(bytes: Uint8Array) {
-  return [0, 1, 2, 3, 4, 5]
-    .map(i => bytes[i].toString(16))
-    .map(x => (x.length === 1 ? '0' + x : x))
-    .join(':');
-}
-
 function parse_icmp(data: Uint8Array, o: Packet) {
   const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
   const icmp = {
@@ -840,6 +839,7 @@ function parse_tcp(data: Uint8Array, o: Packet) {
     urg: !!(flags & 0x20),
     ece: !!(flags & 0x40),
     cwr: !!(flags & 0x80),
+    opt: data.subarray(20,(view.getUint8(12) >> 4)*4)
   };
 
   o.tcp = tcp;
@@ -987,6 +987,10 @@ function parse_ipv4(data: Uint8Array, o: Packet): void {
 
   const tos = view.getUint8(1);
   const len = view.getUint16(2);
+  const identification = view.getUint16(4);
+  const fragment_offset = view.getUint16(6) & 8191;
+  if (fragment_offset!=0)
+    console.log(`ipv4 fragment_offset: ${identification} or ${fragment_offset} !== 0`);
 
   const ttl = view.getUint8(8);
   const proto = view.getUint8(9);
@@ -996,18 +1000,20 @@ function parse_ipv4(data: Uint8Array, o: Packet): void {
     version,
     ihl,
     tos,
-    len,
+    len: data.length,
     ttl,
     proto,
     ip_checksum,
+    df: (view.getUint16(6) & 16384)!=0,
     src: data.subarray(12, 12 + 4),
     dest: data.subarray(16, 16 + 4),
+    opt: data.subarray(20, ihl * 4)
   };
 
   // Ethernet minmum packet size.
-  if (Math.max(len, 46) !== data.length) {
-    throw `ipv4 Length mismatch: ${len} != ${data.length}`;
-  }
+  //if (Math.max(len, 46) !== data.length) {
+  //  console.log(`ipv4 Length mismatch: ${len} != ${data.length}`);
+  //}
 
   o.ipv4 = ipv4;
   const ipdata = data.subarray(ihl * 4, len);
@@ -1036,16 +1042,14 @@ function parse_arp(data: Uint8Array, o: Packet): void {
   o.arp = arp;
 }
 
-export function parseparse_eth(data: Uint8Array): Packet {
+export function parse_eth(data: Uint8Array): Packet {
   const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
 
   const ethertype = view.getUint16(12);
   const eth = {
     ethertype: ethertype,
     dest: data.subarray(0, 6),
-    dest_s: a2ethaddr(data.subarray(0, 6)),
     src: data.subarray(6, 12),
-    src_s: a2ethaddr(data.subarray(6, 12)),
   };
 
   const o: Packet = { eth };
@@ -1064,4 +1068,506 @@ export function parseparse_eth(data: Uint8Array): Packet {
   } else {
     throw 'Unknown ethertype: ' + ethertype;
   }
+}
+
+// Вспомогательные функции для вычисления контрольных сумм
+function calculateChecksum(data: Uint8Array): number {
+  let sum = 0;
+  let i = 0;
+  
+  // Обрабатываем полные 16-битные слова
+  while (i + 1 < data.length) {
+    sum += (data[i] << 8) | data[i + 1];
+    i += 2;
+    
+    // Переносим переполнение
+    while (sum > 0xFFFF) {
+      sum = (sum & 0xFFFF) + (sum >> 16);
+    }
+  }
+  
+  // Если остался нечетный байт
+  if (i < data.length) {
+    sum += data[i] << 8;
+    
+    while (sum > 0xFFFF) {
+      sum = (sum & 0xFFFF) + (sum >> 16);
+    }
+  }
+  
+  return ~sum & 0xFFFF;
+}
+
+function calculateIPChecksum(header: Uint8Array): number {
+  // Обнуляем поле контрольной суммы перед вычислением
+  const tempHeader = new Uint8Array(header);
+  tempHeader[10] = 0;
+  tempHeader[11] = 0;
+  
+  return calculateChecksum(tempHeader);
+}
+
+function calculateTCPChecksum(
+  tcpSegment: Uint8Array,
+  srcIp: Uint8Array,
+  dstIp: Uint8Array
+): number {
+  // Псевдозаголовок для TCP контрольной суммы
+  const pseudoHeader = new Uint8Array(12);
+  
+  // IP адреса источника и назначения
+  pseudoHeader.set(srcIp, 0);
+  pseudoHeader.set(dstIp, 4);
+  
+  // Заполняем нулем и протокол (TCP = 6)
+  pseudoHeader[8] = 0;
+  pseudoHeader[9] = 6; // IPPROTO_TCP
+  
+  // Длина TCP сегмента
+  const tcpLength = tcpSegment.length;
+  pseudoHeader[10] = (tcpLength >> 8) & 0xFF;
+  pseudoHeader[11] = tcpLength & 0xFF;
+  
+  // Обнуляем поле контрольной суммы в TCP заголовке
+  const tempTcpSegment = new Uint8Array(tcpSegment);
+  tempTcpSegment[16] = 0;
+  tempTcpSegment[17] = 0;
+  
+  // Суммируем псевдозаголовок и TCP сегмент
+  const combined = new Uint8Array(pseudoHeader.length + tempTcpSegment.length);
+  combined.set(pseudoHeader, 0);
+  combined.set(tempTcpSegment, pseudoHeader.length);
+  
+  return calculateChecksum(combined);
+}
+
+function calculateUDPChecksum(
+  udpSegment: Uint8Array,
+  srcIp: Uint8Array,
+  dstIp: Uint8Array
+): number {
+  // Псевдозаголовок для UDP контрольной суммы
+  const pseudoHeader = new Uint8Array(12);
+  
+  // IP адреса источника и назначения
+  pseudoHeader.set(srcIp, 0);
+  pseudoHeader.set(dstIp, 4);
+  
+  // Заполняем нулем и протокол (UDP = 17)
+  pseudoHeader[8] = 0;
+  pseudoHeader[9] = 17; // IPPROTO_UDP
+  
+  // Длина UDP сегмента
+  const udpLength = udpSegment.length;
+  pseudoHeader[10] = (udpLength >> 8) & 0xFF;
+  pseudoHeader[11] = udpLength & 0xFF;
+  
+  // Обнуляем поле контрольной суммы в UDP заголовке
+  const tempUdpSegment = new Uint8Array(udpSegment);
+  tempUdpSegment[6] = 0;
+  tempUdpSegment[7] = 0;
+  
+  // Суммируем псевдозаголовок и UDP сегмент
+  const combined = new Uint8Array(pseudoHeader.length + tempUdpSegment.length);
+  combined.set(pseudoHeader, 0);
+  combined.set(tempUdpSegment, pseudoHeader.length);
+  
+  return calculateChecksum(combined);
+}
+
+// Обновленные функции с контрольными суммами
+
+function build_icmp(icmp: Packet['icmp']): Uint8Array {
+  if (!icmp) throw new Error('ICMP data required');
+  
+  const data = icmp.data || new Uint8Array(0);
+  const buffer = new ArrayBuffer(4 + data.byteLength);
+  const view = new DataView(buffer);
+  
+  // Записываем заголовок с нулевой контрольной суммой
+  view.setUint8(0, icmp.type);
+  view.setUint8(1, icmp.code);
+  view.setUint16(2, 0); // Временная контрольная сумма (0 для вычисления)
+  
+  const result = new Uint8Array(buffer);
+  result.set(data, 4);
+  
+  // Вычисляем контрольную сумму
+  const checksum = calculateChecksum(result);
+  view.setUint16(2, checksum);
+  
+  return result;
+}
+
+function build_tcp(tcp: Packet['tcp'], tcp_data?: Uint8Array, srcIp?: Uint8Array, dstIp?: Uint8Array): Uint8Array {
+  if (!tcp) throw new Error('TCP data required');
+  
+  const data = tcp_data || new Uint8Array(0);
+  const doff = tcp.doff || 5;
+  const buffer = new ArrayBuffer(doff * 4 + data.byteLength);
+  const view = new DataView(buffer);
+  
+  // Записываем TCP заголовок
+  view.setUint16(0, tcp.sport);
+  view.setUint16(2, tcp.dport);
+  view.setUint32(4, tcp.seq);
+  view.setUint32(8, tcp.ackn || 0);
+  view.setUint8(12, (doff << 4) | 0);
+  
+  let flags = 0;
+  if (tcp.fin) flags |= 0x01;
+  if (tcp.syn) flags |= 0x02;
+  if (tcp.rst) flags |= 0x04;
+  if (tcp.psh) flags |= 0x08;
+  if (tcp.ack) flags |= 0x10;
+  if (tcp.urg) flags |= 0x20;
+  if (tcp.ece) flags |= 0x40;
+  if (tcp.cwr) flags |= 0x80;
+  view.setUint8(13, flags);
+  
+  view.setUint16(14, tcp.winsize || 65535);
+  view.setUint16(16, 0); // Временная контрольная сумма
+  view.setUint16(18, tcp.urgent || 0);
+  
+  const result = new Uint8Array(buffer);
+  result.set(tcp.opt, 20);
+  result.set(data, doff * 4);
+  
+  // Вычисляем контрольную сумму если предоставлены IP адреса
+  if (srcIp && dstIp && (!tcp.checksum || tcp.checksum === 0)) {
+    const checksum = calculateTCPChecksum(result, srcIp, dstIp);
+    view.setUint16(16, checksum);
+  } else if (tcp.checksum) {
+    view.setUint16(16, tcp.checksum);
+  }
+  
+  return result;
+}
+
+function build_dhcp(dhcp: Packet['dhcp']): Uint8Array {
+  if (!dhcp) throw new Error('DHCP data required');
+  
+  const options = dhcp.options || [];
+  const optionsLength = options.reduce((sum, opt) => sum + opt.length, 0);
+  const buffer = new ArrayBuffer(240 + optionsLength);
+  const view = new DataView(buffer);
+  const result = new Uint8Array(buffer);
+  
+  view.setUint8(0, dhcp.op);
+  view.setUint8(1, dhcp.htype);
+  view.setUint8(2, dhcp.hlen);
+  view.setUint8(3, dhcp.hops);
+  view.setUint32(4, dhcp.xid);
+  view.setUint16(8, dhcp.secs);
+  view.setUint16(10, dhcp.flags);
+  view.setUint32(12, dhcp.ciaddr || 0);
+  view.setUint32(16, dhcp.yiaddr || 0);
+  view.setUint32(20, dhcp.siaddr || 0);
+  view.setUint32(24, dhcp.giaddr || 0);
+  
+  if (dhcp.chaddr) {
+    result.set(dhcp.chaddr.subarray(0, 16), 28);
+  }
+  
+  // Pad remaining chaddr bytes with 0
+  for (let i = 28 + (dhcp.chaddr?.length || 0); i < 44; i++) {
+    result[i] = 0;
+  }
+  
+  view.setUint32(236, dhcp.magic || 0x63538263);
+  
+  let offset = 240;
+  options.forEach(opt => {
+    result.set(opt, offset);
+    offset += opt.length;
+  });
+  
+  return result;
+}
+
+function build_dns(dns: Packet['dns']): Uint8Array {
+  if (!dns) throw new Error('DNS data required');
+  
+  // First pass: calculate total size
+  let totalSize = 12; // Fixed header size
+  
+  function calculateNameSize(name: string[]): number {
+    return name.reduce((sum, part) => sum + 1 + part.length, 1); // +1 for null terminator
+  }
+  
+  dns.questions?.forEach(q => {
+    totalSize += calculateNameSize(q.name) + 4;
+  });
+  
+  dns.answers?.forEach(a => {
+    totalSize += calculateNameSize(a.name) + 10 + (a.data?.length || 0);
+  });
+  
+  const buffer = new ArrayBuffer(totalSize);
+  const view = new DataView(buffer);
+  const result = new Uint8Array(buffer);
+  
+  view.setUint16(0, dns.id);
+  view.setUint16(2, dns.flags || 0);
+  view.setUint16(4, dns.questions?.length || 0);
+  view.setUint16(6, dns.answers?.length || 0);
+  view.setUint16(8, 0); // nscount
+  view.setUint16(10, 0); // arcount
+  
+  let offset = 12;
+  
+  function writeName(name: string[]) {
+    name.forEach(part => {
+      result[offset] = part.length;
+      offset++;
+      const encoder = new TextEncoder();
+      const encoded = encoder.encode(part);
+      result.set(encoded, offset);
+      offset += encoded.length;
+    });
+    result[offset] = 0;
+    offset++;
+  }
+  
+  dns.questions?.forEach(q => {
+    writeName(q.name);
+    view.setUint16(offset, q.type);
+    offset += 2;
+    view.setUint16(offset, q.class);
+    offset += 2;
+  });
+  
+  dns.answers?.forEach(a => {
+    writeName(a.name);
+    view.setUint16(offset, a.type);
+    offset += 2;
+    view.setUint16(offset, a.class || 1);
+    offset += 2;
+    view.setUint32(offset, a.ttl || 0);
+    offset += 4;
+    view.setUint16(offset, a.data?.length || 0);
+    offset += 2;
+    if (a.data) {
+      result.set(a.data, offset);
+      offset += a.data.length;
+    }
+  });
+  
+  return result;
+}
+
+function build_ntp(ntp: Packet['ntp']): Uint8Array {
+  if (!ntp) throw new Error('NTP data required');
+  
+  const buffer = new ArrayBuffer(48);
+  const view = new DataView(buffer);
+  
+  view.setUint8(0, ntp.flags);
+  view.setUint8(1, ntp.stratum);
+  view.setUint8(2, ntp.poll);
+  view.setUint8(3, ntp.precision);
+  view.setUint32(4, ntp.root_delay);
+  view.setUint32(8, ntp.root_disp);
+  view.setUint32(12, ntp.ref_id);
+  view.setUint32(16, ntp.ref_ts_i);
+  view.setUint32(20, ntp.ref_ts_f);
+  view.setUint32(24, ntp.ori_ts_i);
+  view.setUint32(28, ntp.ori_ts_f);
+  view.setUint32(32, ntp.rec_ts_i);
+  view.setUint32(36, ntp.rec_ts_f);
+  view.setUint32(40, ntp.trans_ts_i);
+  view.setUint32(44, ntp.trans_ts_f);
+  
+  return new Uint8Array(buffer);
+}
+
+function build_udp(udp: Packet['udp'], payload?: Packet, srcIp?: Uint8Array, dstIp?: Uint8Array): Uint8Array {
+  if (!udp) throw new Error('UDP data required');
+  
+  let data: Uint8Array;
+  
+  if (payload?.dhcp) {
+    data = build_dhcp(payload.dhcp);
+  } else if (payload?.dns) {
+    data = build_dns(payload.dns);
+  } else if (payload?.ntp) {
+    data = build_ntp(payload.ntp);
+  } else {
+    data = udp.data || new Uint8Array(0);
+  }
+  
+  const buffer = new ArrayBuffer(8 + data.byteLength);
+  const view = new DataView(buffer);
+  const result = new Uint8Array(buffer);
+  
+  view.setUint16(0, udp.sport);
+  view.setUint16(2, udp.dport);
+  view.setUint16(4, 8 + data.byteLength);
+  view.setUint16(6, 0); // Временная контрольная сумма
+  
+  result.set(data, 8);
+  
+  // Вычисляем контрольную сумму если предоставлены IP адреса
+  if (srcIp && dstIp && (!udp.checksum || udp.checksum === 0)) {
+    const checksum = calculateUDPChecksum(result, srcIp, dstIp);
+    view.setUint16(6, checksum);
+  } else if (udp.checksum) {
+    view.setUint16(6, udp.checksum);
+  }
+  
+  return result;
+}
+
+function build_ipv4(ipv4: Packet['ipv4'], payload?: Packet): Uint8Array {
+  if (!ipv4) throw new Error('IPv4 data required');
+  
+  let data: Uint8Array;
+  
+  // Сначала собираем payload чтобы знать его размер
+  if (ipv4.proto === IPV4_PROTO_ICMP && payload?.icmp) {
+    data = build_icmp(payload.icmp);
+  } else if (ipv4.proto === IPV4_PROTO_TCP && payload?.tcp) {
+    // TCP будет собран позже с правильными IP адресами
+    data = new Uint8Array(0); // временно
+  } else if (ipv4.proto === IPV4_PROTO_UDP && payload?.udp) {
+    // UDP будет собран позже с правильными IP адресами
+    data = new Uint8Array(0); // временно
+  } else {
+    data = new Uint8Array(0);
+  }
+  
+  const ihl = ipv4.ihl || 5;
+  let totalLength = ihl * 4 + data.byteLength;
+  
+  // Пересчитываем длину для TCP/UDP
+  if (ipv4.proto === IPV4_PROTO_TCP && payload?.tcp) {
+    const tcpData = payload.tcp_data || new Uint8Array(0);
+    const doff = payload.tcp.doff || 5;
+    totalLength = ihl * 4 + doff * 4 + tcpData.byteLength;
+  } else if (ipv4.proto === IPV4_PROTO_UDP && payload?.udp) {
+    let udpPayloadData: Uint8Array;
+    if (payload?.dhcp) {
+      udpPayloadData = build_dhcp(payload.dhcp);
+    } else if (payload?.dns) {
+      udpPayloadData = build_dns(payload.dns);
+    } else if (payload?.ntp) {
+      udpPayloadData = build_ntp(payload.ntp);
+    } else {
+      udpPayloadData = payload?.udp?.data || new Uint8Array(0);
+    }
+    totalLength = ihl * 4 + 8 + udpPayloadData.byteLength;
+  }
+  
+  const buffer = new ArrayBuffer(totalLength);
+  const view = new DataView(buffer);
+  const result = new Uint8Array(buffer);
+  
+  // Записываем IP заголовок с нулевой контрольной суммой
+  view.setUint8(0, (ipv4.version << 4) | ihl);
+  view.setUint8(1, ipv4.tos || 0);
+  view.setUint16(2, totalLength);
+  view.setUint16(4, /*ipv4.identification ||*/ 0);
+  view.setUint16(6, ipv4.df?16384:0);
+  view.setUint8(8, ipv4.ttl || 64);
+  view.setUint8(9, ipv4.proto);
+  view.setUint16(10, 0); // Временная контрольная сумма
+  
+  if (ipv4.src) {
+    result.set(ipv4.src, 12);
+  }
+  if (ipv4.dest) {
+    result.set(ipv4.dest, 16);
+  }
+  
+  // Options padding if ihl > 5
+  for (let i = 20; i < ihl * 4; i++) {
+    result[i] = ipv4.opt[i-20];
+  }
+  
+  // Вычисляем и устанавливаем IP контрольную сумму
+  const ipHeader = result.slice(0, ihl * 4);
+  const ipChecksum = calculateIPChecksum(ipHeader);
+  view.setUint16(10, ipChecksum);
+  
+  // Теперь собираем payload с правильными контрольными суммами
+  if (ipv4.proto === IPV4_PROTO_ICMP && payload?.icmp) {
+    // ICMP уже собран с контрольной суммой
+    result.set(data, ihl * 4);
+  } else if (ipv4.proto === IPV4_PROTO_TCP && payload?.tcp) {
+    const tcpData = payload.tcp_data || new Uint8Array(0);
+    const tcpSegment = build_tcp(payload.tcp, tcpData, ipv4.src, ipv4.dest);
+    result.set(tcpSegment, ihl * 4);
+  } else if (ipv4.proto === IPV4_PROTO_UDP && payload?.udp) {
+    const udpSegment = build_udp(payload.udp, payload, ipv4.src, ipv4.dest);
+    result.set(udpSegment, ihl * 4);
+  }
+  
+  return result;
+}
+
+export function build_arp(arp: Packet['arp']): Uint8Array {
+  if (!arp) throw new Error('ARP data required');
+  
+  const buffer = new ArrayBuffer(28);
+  const view = new DataView(buffer);
+  const result = new Uint8Array(buffer);
+  
+  view.setUint16(0, arp.htype);
+  view.setUint16(2, arp.ptype);
+  view.setUint8(4, 6); // hlen (MAC address length)
+  view.setUint8(5, 4); // plen (IP address length)
+  view.setUint16(6, arp.oper);
+  
+  if (arp.sha) {
+    result.set(arp.sha.subarray(0, 6), 8);
+  }
+  if (arp.spa) {
+    result.set(arp.spa.subarray(0, 4), 14);
+  }
+  if (arp.tha) {
+    result.set(arp.tha.subarray(0, 6), 18);
+  }
+  if (arp.tpa) {
+    result.set(arp.tpa.subarray(0, 4), 24);
+  }
+  
+  return result;
+}
+
+export function build_eth(packet: Packet): Uint8Array {
+  if (!packet.eth) throw new Error('Ethernet data required');
+  
+  let payload: Uint8Array;
+  
+  if (packet.eth.ethertype === ETHERTYPE_IPV4 && packet.ipv4) {
+    payload = build_ipv4(packet.ipv4, packet);
+  } else if (packet.eth.ethertype === ETHERTYPE_ARP && packet.arp) {
+    payload = build_arp(packet.arp);
+  } else if (packet.eth.ethertype === ETHERTYPE_IPV6) {
+    throw 'Unimplemented: ipv6';
+  } else {
+    throw 'Unknown ethertype: ' + packet.eth.ethertype;
+  }
+  
+  const buffer = new ArrayBuffer(ETH_HEADER_SIZE + payload.byteLength);
+  const result = new Uint8Array(buffer);
+  
+  // Destination MAC
+  if (packet.eth.dest) {
+    result.set(packet.eth.dest.subarray(0, 6), 0);
+  }
+  
+  // Source MAC
+  if (packet.eth.src) {
+    result.set(packet.eth.src.subarray(0, 6), 6);
+  }
+  
+  // Ethertype
+  const view = new DataView(buffer);
+  view.setUint16(12, packet.eth.ethertype);
+  
+  // Payload
+  result.set(payload, ETH_HEADER_SIZE);
+  
+  return result;
 }

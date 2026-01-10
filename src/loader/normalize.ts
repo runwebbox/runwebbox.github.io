@@ -94,7 +94,7 @@ function removeConfigFile(fileSystem: FSEntry): FSEntry {
 }
 
 function randomMac() {
-  return '0X:XX:XX:XX:XX:XX'.replace(/X/g, () =>
+  return '00:22:15:XX:XX:XX'.replace(/X/g, () =>
     '0123456789ABCDEF'.charAt(Math.floor(Math.random() * 16))
   );
 }
@@ -129,6 +129,14 @@ function createDefaultConfig(fileSystem: FSEntry): WebBoxConfig {
           path: '/',
           memory: 512,
         },
+        {
+          type: 'V86',
+          id: 3,
+          ip: [192, 168, 1, 150],
+          mac: randomMac(),
+          path: '/',
+          memory: 512,
+        },
       ],
       pipelines: [
         {
@@ -147,6 +155,25 @@ function createDefaultConfig(fileSystem: FSEntry): WebBoxConfig {
           source_id: 1,
           source_port: 0,
           destination_id: 2,
+          destination_port: 0,
+        },
+        
+        {
+          source_id: 0,
+          source_port: 0,
+          destination_id: 3,
+          destination_port: 0,
+        },
+        {
+          source_id: 1,
+          source_port: 0,
+          destination_id: 3,
+          destination_port: 0,
+        },
+        {
+          source_id: 2,
+          source_port: 0,
+          destination_id: 3,
           destination_port: 0,
         },
       ],
