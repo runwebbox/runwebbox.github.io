@@ -1,6 +1,7 @@
 // BrowserPreview.tsx
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useMemo } from 'react';
 import useEngine from '../../hooks/useEngine';
+import type { browserConfig } from '../../types/webBoxConfig';
 
 interface BrowserPreviewProps {
   machineId: number;
@@ -9,41 +10,52 @@ interface BrowserPreviewProps {
 const BrowserPreview: React.FC<BrowserPreviewProps> = ({ machineId }) => {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [url, setUrl] = useState('/');
   const engine = useEngine();
-
-  // Получаем URL из конфигурации браузера
-  useEffect(() => {
-    const config = engine.getConfig();
-    const machine = config.machines.find(m => m.id === machineId);
-
-    if (machine && machine.type === 'browser') {
-      setUrl('/?mac=' + machine.mac);
+  const machine = useMemo(
+    () => engine.getConfig().machines.find(m => m.id === machineId),
+    [engine, machineId]
+  ) as browserConfig;
+  const [url, setUrl] = useState(machine.url);
+  const getMacPath = (path: string) =>
+    `/${path + (path.includes('?') ? '&' : '?') + machine.mac}&t=${(+new Date()).toString(36)}`;
+  const [iframeUrl, setIframeUrl] = useState(() => {
+    const domain = url.match(/^http:\/\/(.*?)\/(.*)$/);
+    if (!domain) {
+      return 'about:blank';
     }
-  }, [engine, machineId]);
+    engine.sendEventToMachine(machineId, 'update_domain', domain[1]);
+    setIsLoading(true);
+    return getMacPath(domain[2]);
+  });
 
   const handleRefresh = () => {
-    if (iframeRef.current) {
-      setIsLoading(true);
-      // Принудительное обновление с уникальным параметром чтобы избежать кеширования
-      iframeRef.current.src = `${url}&t=${Date.now()}`;
+    const domain = url.match(/^http:\/\/(.*?)\/(.*)$/);
+    if (!domain) {
+      alert('url not parsed');
+      return;
     }
+    engine.sendEventToMachine(machineId, 'update_domain', domain[1]);
+    setIsLoading(true);
+    // Принудительное обновление с уникальным параметром чтобы избежать кеширования
+    setIframeUrl(getMacPath(domain[2]));
   };
 
   return (
     <div className="h-full flex flex-col">
       <div className="bg-zinc-800 px-4 py-2 border-b border-zinc-700 flex justify-between items-center">
-        <h3 className="font-medium">Browser Preview</h3>
-        <div className="flex items-center space-x-3">
-          <div className="text-sm text-gray-400 truncate max-w-xs">{url}</div>
-          <button
-            className="px-3 py-1 bg-zinc-700 rounded text-sm hover:bg-zinc-600 disabled:opacity-50"
-            onClick={handleRefresh}
-            disabled={isLoading}
-          >
-            {isLoading ? 'Loading...' : 'Refresh'}
-          </button>
-        </div>
+        <input
+          type="text"
+          value={url}
+          onChange={e => setUrl(e.target.value)}
+          placeholder={`URL`}
+          className="flex-1 bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+        <button
+          className="px-3 py-1 bg-zinc-700 rounded text-sm hover:bg-zinc-600 disabled:opacity-50 m-1"
+          onClick={handleRefresh}
+        >
+          {isLoading ? 'Loading...' : 'Refresh'}
+        </button>
       </div>
 
       <div className="flex-1 bg-white relative">
@@ -54,7 +66,7 @@ const BrowserPreview: React.FC<BrowserPreviewProps> = ({ machineId }) => {
         )}
         <iframe
           ref={iframeRef}
-          src={url}
+          src={iframeUrl}
           className="w-full h-full border-0"
           title="Browser Preview"
           onLoad={() => {

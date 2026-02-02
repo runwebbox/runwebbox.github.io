@@ -20,6 +20,7 @@ export class BrowserModule implements MachineModule {
   private requestChannel: BroadcastChannel;
   private responseChannel: BroadcastChannel;
   private logs: string = '';
+  private domain: string = '';
 
   // Хранилище для HTTP-запросов (не для TCP соединений!)
   private httpRequests: Map<
@@ -56,8 +57,13 @@ export class BrowserModule implements MachineModule {
       this.handleIncomingData.bind(this) // Callback для входящих данных
     );
 
+    const domain = this.config.url.match(/^http:\/\/(.*?)\/(.*)$/);
+    if (domain) this.domain = domain[1];
+    else this.domain = config.ip.join('.');
+
     this.requestChannel = new BroadcastChannel('fetch-requests');
     this.responseChannel = new BroadcastChannel('fetch-responses');
+    console.log(domain);
   }
 
   async start(): Promise<void> {
@@ -83,10 +89,13 @@ export class BrowserModule implements MachineModule {
   }
 
   handleEvent<T extends keyof EventMapToMachine>(
-    type: T
-    //_data: EventMapToMachine[T]['payload']
+    type: T,
+    data: EventMapToMachine[T]['payload']
   ): EventMapToMachine[T]['result'] {
     switch (type) {
+      case 'update_domain':
+        this.domain = data;
+        return;
       default:
         throw new Error(`Unknown event type: ${type}`);
     }
@@ -138,20 +147,23 @@ export class BrowserModule implements MachineModule {
 
     // Определяем удаленный порт (по умолчанию 80 для HTTP)
     let remotePort = 80;
-    const urlMatch = this.config.url.match(/:\/(\/)?([^:/]+)(:(\d+))?/);
-    if (urlMatch && urlMatch[4]) {
-      remotePort = parseInt(urlMatch[4]);
+    const urlMatch = this.domain.match(/([^:/]+)(:(\d+))?/);
+    if (urlMatch && urlMatch[3]) {
+      remotePort = parseInt(urlMatch[3]);
     }
-    remotePort = 3000;
-    // Преобразуем целевой IP в Uint8Array
-    const remoteIP = new Uint8Array([192, 168, 1, 50]);
+    const remoteIP = new Uint8Array(
+      urlMatch && urlMatch[1]
+        ? urlMatch[1].split('.').map(x => parseInt(x, 10))
+        : [192, 168, 1, 50]
+    );
+    console.log(remoteIP);
 
     // Создаем HTTP запрос
     const httpRequest = this.buildHTTPRequest(
       method,
       path,
       headers,
-      remoteIP.join('.') + (remotePort==80?'':':'+remotePort)
+      remoteIP.join('.') + (remotePort == 80 ? '' : ':' + remotePort)
     );
     const requestData = new TextEncoder().encode(httpRequest);
 
@@ -199,7 +211,7 @@ export class BrowserModule implements MachineModule {
     };
 
     const allHeaders = { ...defaultHeaders };
-    let request = `${method.toUpperCase()} ${path} HTTP/1.1\r\n`;
+    let request = ` ${method.toUpperCase()} ${path} HTTP/1.1\r\n`;
 
     for (const [key, value] of Object.entries(allHeaders)) {
       request += `${key}: ${value}\r\n`;

@@ -110,7 +110,7 @@ function createDefaultConfig(fileSystem: FSEntry): WebBoxConfig {
           type: 'browser',
           id: 0,
           ip: [192, 168, 1, 100],
-          url: '192.168.1.1/',
+          url: 'http://192.168.1.50:3000/index.html',
           mac: randomMac(),
         },
         {
@@ -157,7 +157,7 @@ function createDefaultConfig(fileSystem: FSEntry): WebBoxConfig {
           destination_id: 2,
           destination_port: 0,
         },
-        
+
         {
           source_id: 0,
           source_port: 0,

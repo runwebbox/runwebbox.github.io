@@ -87,14 +87,19 @@ export default class V86Module implements MachineModule {
     this.v86Instance.add_listener('net0-send', (p: Uint8Array) => {
       try {
         const packet = parse_eth(p);
-        console.log('V86 - send', p);
-        console.log(packet);
+        console.log('V86 send', packet);
         this.sendPacketCallback(packet, 0);
       } catch (e) {
         console.log(e);
       }
     });
-    this.v86Instance.serial0_send('ip link set dev eth0 address '+this.config.mac+'; ip link set eth0 up; ifconfig eth0 '+this.config.ip.join('.')+' netmask 255.255.255.0 broadcast 192.168.1.255\n');
+    this.v86Instance.serial0_send(
+      'ip link set dev eth0 address ' +
+        this.config.mac +
+        '; ip link set eth0 up; ifconfig eth0 ' +
+        this.config.ip.join('.') +
+        ' netmask 255.255.255.0 broadcast 192.168.1.255\n'
+    );
 
     while (!this.output_buffer.includes(':~# ')) {
       await new Promise(r => setTimeout(r, 1000));
@@ -111,14 +116,16 @@ export default class V86Module implements MachineModule {
   }
 
   handlePacket(packet: Packet): void {
-    if(JSON.stringify(parse_eth(build_eth(packet))) != JSON.stringify(packet)) {
-      console.error(JSON.stringify(parse_eth(build_eth(packet))), '!=', JSON.stringify(packet));
-    }
+    //if(JSON.stringify(parse_eth(build_eth(packet))) != JSON.stringify(packet)) {
+    //  console.error(JSON.stringify(parse_eth(build_eth(packet))), '!=', JSON.stringify(packet));
+    //}
 
+    console.log(`Received packet: `, packet);
     const eth = build_eth(packet);
+    console.log(`Received packet2: `, eth);
     //this.log(`Received packet: ${JSON.stringify(packet)}`);
     //this.log(`Received packet: ${eth.join(',')}`);
-    console.log(`Received packet: ${eth.join(',')}`);
+
     this.v86Instance!.v86.cpu.bus.listeners['net0-receive'][0].fn(eth);
   }
 
@@ -129,8 +136,7 @@ export default class V86Module implements MachineModule {
     if (!this.v86Instance) return;
     switch (type) {
       case 'send_input':
-        if (data=='^C') 
-          this.v86Instance.serial0_send('\u0003');
+        if (data == '^C') this.v86Instance.serial0_send('\u0003');
         else this.v86Instance.serial0_send(data + '\n');
         //this.v86Instance!.keyboard_send_text(data);
         this.log(`Sent input: ${data}`);

@@ -94,6 +94,7 @@ export default class StaticServer implements MachineModule {
     try {
       // Декодируем HTTP запрос
       const requestText = new TextDecoder().decode(data);
+      this.log('Data: ' + requestText);
       const request = this.parseHTTPRequest(requestText);
       console.log(request);
       if (!request) {
@@ -128,7 +129,7 @@ export default class StaticServer implements MachineModule {
     if (lines.length < 1) return null;
 
     // Парсим первую строку
-    const firstLine = lines[0].split(' ');
+    const firstLine = lines[0].trimStart().split(' ');
     if (firstLine.length < 3) return null;
 
     const method = firstLine[0];

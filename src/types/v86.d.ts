@@ -343,6 +343,16 @@ declare module 'v86' {
   export class V86 {
     constructor(options: V86Options);
 
+    v86: {
+      cpu: {
+        bus: {
+          listeners: {
+            'net0-receive': [{ fn: (Uint8Array) => void }];
+          };
+        };
+      };
+    };
+
     /**
      * Start emulation. Do nothing if emulator is running already. Can be asynchronous.
      */

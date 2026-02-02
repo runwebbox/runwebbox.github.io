@@ -6,6 +6,10 @@ export type EventMapToMachine = {
     payload: string;
     result: void;
   };
+  update_domain: {
+    payload: string;
+    result: void;
+  };
 };
 
 export type EventToMachineFunction = <K extends keyof EventMapToMachine>(

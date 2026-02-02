@@ -116,43 +116,42 @@ function updateClientOriginMapping(clientUrl, requestUrl, referrer, client) {
 async function handleBinZstRequest(event) {
   const cacheName = 'bin-zst-cache-v1';
   const request = event.request;
-  
+
   try {
     // Открываем кэш
     const cache = await caches.open(cacheName);
-    
+
     // Пытаемся найти ответ в кэше
     const cachedResponse = await cache.match(request);
-    
+
     if (cachedResponse) {
       // Если есть в кэше - возвращаем
       return cachedResponse;
     }
-    
+
     // Если нет в кэше - делаем сетевой запрос
     const networkResponse = await fetch(request);
-    
+
     // Проверяем, что ответ успешный
     if (networkResponse.ok) {
       // Клонируем ответ и сохраняем в кэш
       const responseToCache = networkResponse.clone();
       await cache.put(request, responseToCache);
     }
-    
+
     return networkResponse;
   } catch (error) {
     // Если и сеть недоступна, и в кэше нет - пробуем найти в кэше
     const cache = await caches.open(cacheName);
     const cachedResponse = await cache.match(request);
-    
+
     if (cachedResponse) {
       return cachedResponse;
     }
-    
+
     throw error;
   }
 }
-
 
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
