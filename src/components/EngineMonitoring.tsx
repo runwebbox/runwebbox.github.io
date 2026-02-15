@@ -124,7 +124,7 @@ const EngineMonitoring: React.FC = () => {
     <div className="h-full flex flex-col">
       {/* Tabs */}
       <div className="bg-zinc-800 border-b border-zinc-700">
-        <div className="flex">
+        <div className="flex flex-wrap">
           {tabs.map(tab => (
             <button
               onClick={() => handleTabChange(tab.info)}
@@ -135,7 +135,7 @@ const EngineMonitoring: React.FC = () => {
                   ? tab.info.selectedMachineId
                   : '')
               }
-              className={`px-6 py-3 font-medium ${
+              className={`px-6 py-3 grow font-medium ${
                 isSelectedTab(tab.info)
                   ? 'text-white border-b-2 border-blue-500'
                   : 'text-gray-400 hover:text-white'

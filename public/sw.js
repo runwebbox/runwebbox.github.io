@@ -118,6 +118,20 @@ async function handleBinZstRequest(event) {
   const request = event.request;
 
   try {
+    if (request.url.includes('-0.bin.zst')) {
+      return new Response(
+        new Uint8Array([0x28, 0xb5, 0x2f, 0xfd, 0x20, 0x00, 0x01, 0x00, 0x00]),
+        {
+          status: 200,
+          statusText: 'OK',
+          headers: {
+            'Content-Type': 'application/octet-stream',
+            'Content-Length': '0',
+          },
+        }
+      );
+    }
+
     // Открываем кэш
     const cache = await caches.open(cacheName);
 
@@ -136,7 +150,11 @@ async function handleBinZstRequest(event) {
     if (networkResponse.ok) {
       // Клонируем ответ и сохраняем в кэш
       const responseToCache = networkResponse.clone();
-      await cache.put(request, responseToCache);
+      try {
+        await cache.put(request, responseToCache);
+      } catch (error) {
+        console.log('cache.put', error);
+      }
     }
 
     return networkResponse;
@@ -159,7 +177,10 @@ self.addEventListener('fetch', event => {
 
   // Игнорируем запросы к другим доменам
   if (url.origin !== location.origin) {
-    event.respondWith(handleBinZstRequest(event));
+    if (url.origin.includes('dimathenekov.github.io'))
+      event.respondWith(handleBinZstRequest(event));
+    //else
+    //  event.respondWith(fetch(new Request('https://cors-anywhere.com/'+event.request.url.replace('http://', 'https://'), event.request)));
     return;
   }
 

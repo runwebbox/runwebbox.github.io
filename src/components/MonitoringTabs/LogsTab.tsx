@@ -43,15 +43,25 @@ const LogsTab: React.FC<{ machineId: number }> = ({ machineId }) => {
       }
     }
   }, [engine, machineId, inputValue]);
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.ctrlKey && e.key === 'c') {
+        e.preventDefault();
+        console.log('^C');
+        engine.sendEventToMachine(machineId, 'send_input', '^C');
+      }
+    },
+    [engine, machineId, handleSendInput]
+  );
 
-  const handleKeyPress = useCallback(
+  const handleKeyUp = useCallback(
     (e: React.KeyboardEvent) => {
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         handleSendInput();
       }
     },
-    [handleSendInput]
+    [engine, machineId, handleSendInput]
   );
 
   const getLogColor = useCallback((lvl: string) => {
@@ -101,7 +111,8 @@ const LogsTab: React.FC<{ machineId: number }> = ({ machineId }) => {
             type="text"
             value={inputValue}
             onChange={e => setInputValue(e.target.value)}
-            onKeyPress={handleKeyPress}
+            onKeyUp={handleKeyUp}
+            onKeyDown={handleKeyDown}
             placeholder={`Send input to machine ${machineId}...`}
             className="flex-1 bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
             disabled={machineId === null}

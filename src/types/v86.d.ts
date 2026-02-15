@@ -340,6 +340,44 @@ declare module 'v86' {
     };
   }
 
+  interface QID {
+    type: number; // 0x80 for directory, 0 for file
+    version: number;
+    path: number;
+  }
+
+  interface FS9PInode {
+    atime: number;
+    ctime: number;
+    direntries: Map<string, number>; // для директорий, для файлов может отсутствовать или быть undefined
+    fid: number;
+    foreign_id: number;
+    gid: number;
+    locks: any[]; // возможно, массив блокировок, но точный тип неизвестен
+    major: number;
+    minor: number;
+    mode: number; // битовая маска: 33188 (0100644) для файла, 16877 (040755) для директории
+    mount_id: number;
+    mtime: number;
+    nlinks: number;
+    qid: QID;
+    sha256sum: string;
+    size: number;
+    status: number;
+    symlink: string;
+    uid: number;
+  }
+
+  interface FS9P {
+    inodedata: { [inode: number]: Uint8Array };
+    inodes: FS9PInode[]; // массив, где индекс — номер inode; может быть undefined для неиспользуемых
+    mounts: any[]; // неизвестно
+    qidcounter: { last_qidnumber: number };
+    storage: any; // можно описать подробнее, если нужно
+    total_size: number;
+    used_size: number;
+  }
+
   export class V86 {
     constructor(options: V86Options);
 
@@ -352,6 +390,8 @@ declare module 'v86' {
         };
       };
     };
+
+    fs9p: FS9P;
 
     /**
      * Start emulation. Do nothing if emulator is running already. Can be asynchronous.
