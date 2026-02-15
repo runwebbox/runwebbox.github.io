@@ -56,7 +56,7 @@ export default class V86Module implements MachineModule {
       net_device: {
         type: 'virtio',
         relay_url: 'fetch',
-        cors_proxy: 'https://cors-anywhere.com/'
+        cors_proxy: 'https://dima.mysoftware.ru/tmp/cors.php?url='
       },
       disable_speaker: true,
       autostart: true,
