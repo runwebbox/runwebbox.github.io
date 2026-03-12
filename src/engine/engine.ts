@@ -161,6 +161,7 @@ export class Engine {
   }
 
   async start(): Promise<void> {
+    return;
     if (!['stopped', 'error'].includes(this.status)) {
       throw new Error('Engine is already running');
     }

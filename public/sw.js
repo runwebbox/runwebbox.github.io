@@ -177,7 +177,7 @@ self.addEventListener('fetch', event => {
 
   // Игнорируем запросы к другим доменам
   if (url.origin !== location.origin) {
-    if (url.origin.includes('dimathenekov.github.io'))
+    if (url.origin.includes('dimathenekov.github.io') || url.origin.includes('registry.npmjs.org'))
       event.respondWith(handleBinZstRequest(event));
     //else
     //  event.respondWith(fetch(new Request('https://cors-anywhere.com/'+event.request.url.replace('http://', 'https://'), event.request)));

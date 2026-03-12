@@ -9,12 +9,14 @@ import { EngineProvider } from './providers/EngineProvider';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { EngineControl } from './components/EngineControl';
 import EngineMonitoring from './components/EngineMonitoring';
+import NpmInBrowserDemo from './components/TEST';
 
 interface AppProps {
   engine: Engine;
 }
 
 const App: React.FC<AppProps> = (props: AppProps) => {
+  return <NpmInBrowserDemo />;
   return (
     <Provider store={store}>
       <EngineProvider engine={props.engine}>
